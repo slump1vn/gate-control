@@ -27,6 +27,7 @@ class LprAppConfig(AppConfig):
 
         try:
             from apscheduler.schedulers.background import BackgroundScheduler
+            from apscheduler.triggers.cron import CronTrigger
             from apscheduler.triggers.interval import IntervalTrigger
             from django_apscheduler.jobstores import DjangoJobStore
 
@@ -40,9 +41,17 @@ class LprAppConfig(AppConfig):
                 replace_existing=True,
             )
 
+            scheduler.add_job(
+                'lpr_app.scheduler:run_purge_access_events',
+                trigger=CronTrigger(hour=3, minute=0),
+                id='purge_access_events',
+                replace_existing=True,
+            )
+
             scheduler.start()
             logger.info(
-                'APScheduler started: retry_stuck_images every %d minutes',
+                'APScheduler started: retry_stuck_images every %d minutes, '
+                'purge_access_events daily at 03:00',
                 settings.RETRY_INTERVAL_MINUTES,
             )
         except Exception:

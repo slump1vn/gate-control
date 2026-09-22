@@ -1,0 +1,182 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}{{ block.super }}
+<style>
+  .gate-test { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 2fr); gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .gate-test { grid-template-columns: 1fr; } }
+  .gate-card { border: 1px solid var(--hairline-color); border-radius: 6px; padding: 16px; background: var(--body-bg); }
+  .gate-card h2 { margin: 0 0 12px; font-size: 1rem; }
+  .gate-kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
+  .gate-kv dt { color: var(--body-quiet-color); }
+  .gate-kv dd { margin: 0; font-weight: 600; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem; font-weight: 600; }
+  .badge-granted { background: #1e7e34; color: #fff; }
+  .badge-denied { background: #b02a37; color: #fff; }
+  .badge-manual, .badge-shadow { background: #6c757d; color: #fff; }
+  .badge-live { background: #d9480f; color: #fff; }
+  .barrier { width: 100%; max-width: 320px; height: auto; display: block; margin: 8px auto; }
+  .barrier .arm { transition: transform 0.45s linear; transform-origin: 40px 110px; }
+  .barrier .post { fill: var(--body-quiet-color); }
+  .barrier .arm-bar { fill: #d9480f; }
+  .barrier .arm-stripe { fill: #fff; }
+  .barrier .road { stroke: var(--hairline-color); stroke-width: 3; }
+  .arm-state { text-align: center; font-size: 1.1rem; font-weight: 700; margin: 4px 0 12px; }
+  .sim-buttons { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .sim-buttons button { min-width: 80px; }
+  .history { margin: 12px 0 0; padding: 0; list-style: none; font-size: 0.8rem; color: var(--body-quiet-color); max-height: 160px; overflow-y: auto; }
+  .result-images { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .result-images img { max-width: 100%; max-height: 260px; border: 1px solid var(--hairline-color); border-radius: 4px; }
+  .note { color: var(--body-quiet-color); font-size: 0.85rem; }
+  .gate-test table { width: 100%; }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:lpr_app_gatedevice_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; <a href="{% url 'admin:lpr_app_gatedevice_change' gate.pk %}">{{ gate.name }}</a>
+  &rsaquo; Test recognition
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="gate-test">
+
+  <div>
+    <div class="gate-card">
+      <h2>Gate</h2>
+      <dl class="gate-kv">
+        <dt>Mode</dt><dd><span class="badge badge-{{ mode }}">{{ mode }}</span></dd>
+        <dt>Controller</dt><dd>{{ gate.get_controller_type_display }}</dd>
+        <dt>Commands sent</dt><dd>{% if can_actuate %}yes{% else %}no (shadow mode, real controller){% endif %}</dd>
+        <dt>Frames per test</dt><dd>1 to {{ burst_frames }}, max {{ max_upload_mb }} MB each</dd>
+      </dl>
+    </div>
+
+    {% if simulator %}
+    <div class="gate-card" style="margin-top: 20px;">
+      <h2>Simulated barrier</h2>
+      <svg class="barrier" viewBox="0 0 320 140" role="img" aria-label="Barrier arm position">
+        <line class="road" x1="0" y1="130" x2="320" y2="130"></line>
+        <rect class="post" x="28" y="96" width="24" height="34" rx="3"></rect>
+        <g class="arm" id="arm" style="transform: rotate({% widthratio simulator.position 1 -85 %}deg);">
+          <rect class="arm-bar" x="40" y="104" width="270" height="12" rx="4"></rect>
+          <rect class="arm-stripe" x="90" y="104" width="24" height="12"></rect>
+          <rect class="arm-stripe" x="160" y="104" width="24" height="12"></rect>
+          <rect class="arm-stripe" x="230" y="104" width="24" height="12"></rect>
+        </g>
+        <circle class="post" cx="40" cy="110" r="9"></circle>
+      </svg>
+      <div class="arm-state" id="arm-state">{{ simulator.arm_state }}</div>
+      <form method="post" class="sim-buttons">
+        {% csrf_token %}
+        <button type="submit" name="command" value="open" class="button">Open</button>
+        <button type="submit" name="command" value="close" class="button">Close</button>
+        <button type="submit" name="command" value="stop" class="button">Stop</button>
+      </form>
+      <p class="note">Travel {{ simulator.travel_seconds }} s; auto-close {% if simulator.auto_close_seconds %}after {{ simulator.auto_close_seconds }} s{% else %}off{% endif %}. Change these on the gate's edit page.</p>
+      <ul class="history" id="history">
+        {% for h in simulator.history reversed %}<li>{{ h.at|slice:"11:19" }} {{ h.event }}{% if h.result %} ({{ h.result }}){% endif %} &rarr; {{ h.arm_state }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% else %}
+    <div class="gate-card" style="margin-top: 20px;">
+      <h2>Barrier</h2>
+      <p class="note">This gate uses a real controller. Tests show the decision only; set the controller type to "Simulated barrier" to watch the arm move.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <div>
+    <div class="gate-card">
+      <h2>Test with plate photos</h2>
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <p>
+          <input type="file" name="frames" accept="image/jpeg,image/png,image/bmp" multiple required>
+        </p>
+        <p class="note">Several photos of the same vehicle act like a camera burst: at least GATE_CONSENSUS_MIN of them must agree on the plate. A single photo can only be granted if GATE_CONSENSUS_MIN is 1.</p>
+        <input type="submit" value="Run recognition" class="default">
+      </form>
+    </div>
+
+    {% if result %}
+    <div class="gate-card" style="margin-top: 20px;">
+      <h2>Result <span class="badge badge-{{ result.decision }}">{{ result.decision }}</span></h2>
+      <dl class="gate-kv">
+        <dt>Reason</dt><dd>{{ result.get_reason_display }} <span class="note">({{ result.reason }})</span></dd>
+        <dt>Plate</dt><dd>{{ result.plate_normalized|default:"-" }} <span class="note">read as "{{ result.plate_raw|default:"-" }}"</span></dd>
+        <dt>Confidence</dt><dd>{% if result.confidence is not None %}{{ result.confidence|floatformat:2 }}{% else %}-{% endif %}</dd>
+        <dt>Frames agreed</dt><dd>{{ result.frames_agreed }} of {{ result.frames_read }} read</dd>
+        <dt>Vehicle</dt><dd>{% if result.vehicle %}{{ result.vehicle.plate_display }} ({{ result.vehicle.owner_name }}){% else %}-{% endif %}</dd>
+        {% if result.near_miss_vehicle %}<dt>Near miss</dt><dd>{{ result.near_miss_vehicle.plate_display }} ({{ result.near_miss_vehicle.owner_name }}), not opened automatically</dd>{% endif %}
+        <dt>Barrier command</dt><dd>{% if result.command %}{{ result.command }}: {{ result.command_result|default:"not sent" }}{% else %}none{% endif %}</dd>
+        <dt>Latency</dt><dd>{{ result.decision_latency_ms }} ms</dd>
+      </dl>
+      {% if result.uploaded_image %}
+      <div class="result-images">
+        {% if result.uploaded_image.processed_image %}
+        <img src="/api/v1/gate/events/{{ result.id }}/image/processed/" alt="Detected plate on the evidence frame">
+        {% else %}
+        <img src="/api/v1/gate/events/{{ result.id }}/image/original/" alt="Evidence frame">
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="gate-card" style="margin-top: 20px;">
+      <h2>Recent events at this gate</h2>
+      <table>
+        <thead><tr><th>Time</th><th>Plate</th><th>Decision</th><th>Reason</th><th>Command</th><th>Test</th></tr></thead>
+        <tbody>
+        {% for e in recent %}
+          <tr>
+            <td>{{ e.timestamp|date:"H:i:s d/m" }}</td>
+            <td>{{ e.plate_normalized|default:"-" }}</td>
+            <td><span class="badge badge-{{ e.decision }}">{{ e.decision }}</span></td>
+            <td>{{ e.reason }}</td>
+            <td>{% if e.command %}{{ e.command }}: {{ e.command_result|default:"-" }}{% else %}-{% endif %}</td>
+            <td>{{ e.is_test|yesno:"yes,no" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="note">No events yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% if simulator %}
+<script>
+  (function () {
+    var arm = document.getElementById('arm');
+    var label = document.getElementById('arm-state');
+    var history = document.getElementById('history');
+    var url = '/api/v1/gate/devices/{{ gate.pk }}/simulator/';
+    function render(s) {
+      arm.style.transform = 'rotate(' + (-85 * s.position) + 'deg)';
+      label.textContent = s.arm_state + ' (' + Math.round(s.position * 100) + '%)';
+      history.innerHTML = '';
+      s.history.slice().reverse().forEach(function (h) {
+        var li = document.createElement('li');
+        li.textContent = h.at.slice(11, 19) + ' ' + h.event + (h.result ? ' (' + h.result + ')' : '') + ' → ' + h.arm_state;
+        history.appendChild(li);
+      });
+    }
+    function poll() {
+      fetch(url, { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (s) { if (s) render(s); })
+        .catch(function () {})
+        .finally(function () { setTimeout(poll, 500); });
+    }
+    poll();
+  })();
+</script>
+{% endif %}
+{% endblock %}

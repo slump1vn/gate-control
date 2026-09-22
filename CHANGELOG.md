@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Gate automation (openspec change `2026-09-22-anpr-gate-automation`): vehicle registry with Vietnamese plate normalisation, consensus-based access decisions (`/api/v1/gate/decide/`), cameras managed from the admin with encrypted credentials and a connection test, access event log with retention, manual overrides through an agent command queue, gate metrics (`lpr_gate_*`)
+- Session login for the SPA (`/api/v1/auth/`) with `gate_admin` / `gate_operator` roles
+- Simulated barrier implementing the ESP32 controller contract, and a Django admin "Test recognition" page that runs uploaded photos through the decision pipeline and animates the simulated arm
+- `gate-agent` service (compose profile `gate`, image `open-lpr-gate-agent`): camera snapshot/RTSP ingest, presence trigger, burst decisions, controller relay; `decide` and `replay` modes for testing without a camera
+- SPA gate pages: login with role-aware navigation, `/gate` status panel with barrier arm and emergency STOP, `/vehicles` registry with live plate normalisation, `/events` log with frame thumbnails and "open anyway", and for admins `/manage/cameras` (connection test, read-zone picker, change history) and `/manage/gates`
+
+### Changed
+- `UPLOAD_FILE_MAX_SIZE` now defaults to 2MB (`2097152`) everywhere: settings.py (was 1MB), `.env` examples (was 1MB) and all Docker Compose files (was 10MB). **Docker deployments that need larger uploads must set `UPLOAD_FILE_MAX_SIZE=10485760` in `.env`.**
+- `FILE_UPLOAD_MAX_MEMORY_SIZE` follows `UPLOAD_FILE_MAX_SIZE`, so accepted uploads are kept in memory instead of spooled to temp files
+- `CORS_ALLOW_CREDENTIALS` is enabled for `CORS_ALLOWED_ORIGINS`, and `CSRF_TRUSTED_ORIGINS` defaults to `CORS_ALLOWED_ORIGINS`
+- `retry_stuck_images` skips gate camera frames; the image list, detail and download endpoints no longer serve them
+
 ## [1.4.0] - 2026-06-02
 
 ### Added

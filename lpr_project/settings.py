@@ -14,7 +14,6 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',')])
 
 # CSRF Trusted Origins for cross-origin requests
-CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])
 
 # Application definition
 INSTALLED_APPS = [
@@ -124,9 +123,11 @@ if not MEDIA_DIR.exists():
     os.makedirs(MEDIA_DIR)
 
 # File upload settings
-FILE_UPLOAD_MAX_MEMORY_SIZE = 250 * 1024  # 250KB
+UPLOAD_FILE_MAX_SIZE = config('UPLOAD_FILE_MAX_SIZE', default=2097152, cast=int)  # 2MB
+# Keep accepted uploads in memory instead of spooling them to temp files
+FILE_UPLOAD_MAX_MEMORY_SIZE = UPLOAD_FILE_MAX_SIZE
+# File parts are excluded from this check, so it does not limit image size
 DATA_UPLOAD_MAX_MEMORY_SIZE = 250 * 1024  # 250KB
-UPLOAD_FILE_MAX_SIZE = config('UPLOAD_FILE_MAX_SIZE', default=1048576, cast=int)
 
 # Allowed file types for upload
 ALLOWED_IMAGE_TYPES = ['jpeg', 'jpg', 'png', 'webp']
@@ -137,6 +138,16 @@ PLATE_HEIGHT_FRACTION = config('PLATE_HEIGHT_FRACTION', default=0.05, cast=float
 
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])
 CORS_ALLOW_PRIVATE_NETWORK = config('CORS_ALLOW_PRIVATE_NETWORK', default=False, cast=bool)
+# The SPA uses session cookies for admin login and may be served from another
+# origin of the same site (e.g. a different port), so CORS carries credentials
+# for the explicitly allowed origins, and those origins are CSRF-trusted.
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()]) or CORS_ALLOWED_ORIGINS
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
+CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 
 RATE_LIMIT_ENABLE = config('RATE_LIMIT_ENABLE', default=True, cast=bool)
 RATE_LIMIT_RATE = config('RATE_LIMIT_RATE', default='2/min', cast=str)
@@ -161,6 +172,26 @@ RETRY_SCHEDULER_ENABLED = config('RETRY_SCHEDULER_ENABLED', default=True, cast=b
 QWEN_API_KEY = config('QWEN_API_KEY', default='')
 QWEN_BASE_URL = config('QWEN_BASE_URL', default='https://ollama.computedsynergy.com/v1')
 QWEN_MODEL = config('QWEN_MODEL', default='qwen3-vl-4b-instruct')
+
+# Gate automation (barrier control from plate recognition)
+GATE_MODE = config('GATE_MODE', default='shadow')  # shadow | live
+GATE_BURST_FRAMES = config('GATE_BURST_FRAMES', default=3, cast=int)
+GATE_CONSENSUS_MIN = config('GATE_CONSENSUS_MIN', default=2, cast=int)
+GATE_MIN_CONFIDENCE = config('GATE_MIN_CONFIDENCE', default=0.80, cast=float)
+GATE_DECIDE_TIMEOUT = config('GATE_DECIDE_TIMEOUT', default=8, cast=int)
+GATE_WORKER_THREADS = config('GATE_WORKER_THREADS', default=3, cast=int)
+GATE_COMMAND_TTL_SECONDS = config('GATE_COMMAND_TTL_SECONDS', default=15, cast=int)
+GATE_EVENT_RETENTION_DAYS = config('GATE_EVENT_RETENTION_DAYS', default=90, cast=int)
+GATE_AUTO_CLOSE = config('GATE_AUTO_CLOSE', default='controller')  # controller | software
+GATE_AUTO_CLOSE_SECONDS = config('GATE_AUTO_CLOSE_SECONDS', default=10, cast=int)
+GATE_HEARTBEAT_TIMEOUT_SECONDS = config('GATE_HEARTBEAT_TIMEOUT_SECONDS', default=30, cast=int)
+GATE_AGENT_TOKEN = config('GATE_AGENT_TOKEN', default='')
+GATE_CONFIG_ENCRYPTION_KEY = config('GATE_CONFIG_ENCRYPTION_KEY', default='')
+GATE_CAMERA_ALLOWED_CIDRS = config(
+    'GATE_CAMERA_ALLOWED_CIDRS',
+    default='10.0.0.0/8,172.16.0.0/12,192.168.0.0/16',
+    cast=lambda v: [s.strip() for s in v.split(',') if s.strip()],
+)
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

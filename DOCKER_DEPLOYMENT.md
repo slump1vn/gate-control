@@ -332,7 +332,7 @@ curl http://localhost:8000/health/
 | QWEN_API_KEY | - | Qwen3-VL API key (required) |
 | QWEN_BASE_URL | https://ollama.computedsynergy.com/v1 | API endpoint URL |
 | QWEN_MODEL | qwen3-vl-4b-instruct | AI model name |
-| UPLOAD_FILE_MAX_SIZE | 10485760 | Maximum upload size (10MB) |
+| UPLOAD_FILE_MAX_SIZE | 2097152 | Maximum upload size per file (2MB) |
 | MAX_BATCH_SIZE | 10 | Maximum batch processing size |
 | DJANGO_SUPERUSER_USERNAME | - | Auto-create superuser username |
 | DJANGO_SUPERUSER_EMAIL | - | Auto-create superuser email |
@@ -349,7 +349,7 @@ curl http://localhost:8000/health/
 | SECRET_KEY | django-insecure-change-me | Django secret key |
 | DEBUG | False | Django debug mode |
 | ALLOWED_HOSTS | localhost,127.0.0.1,0.0.0.0 | Allowed hosts for Django |
-| UPLOAD_FILE_MAX_SIZE | 10485760 | Maximum upload size (10MB) |
+| UPLOAD_FILE_MAX_SIZE | 2097152 | Maximum upload size per file (2MB) |
 | MAX_BATCH_SIZE | 10 | Maximum batch processing size |
 | DATABASE_PATH | /app/data/db.sqlite3 | Database path in container |
 | DJANGO_SUPERUSER_USERNAME | - | Auto-create superuser username |

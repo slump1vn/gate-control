@@ -330,7 +330,7 @@ QWEN_BASE_URL=https://your-open-api-compatible-endpoint.com/v1
 QWEN_MODEL=qwen3-vl-4b-instruct
 
 # File Upload Settings
-UPLOAD_FILE_MAX_SIZE=10485760  # 10MB
+UPLOAD_FILE_MAX_SIZE=2097152  # 2MB
 MAX_BATCH_SIZE=10
 ```
 
@@ -355,7 +355,7 @@ DEBUG=False
 ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
 
 # File Upload Settings
-UPLOAD_FILE_MAX_SIZE=10485760  # 10MB
+UPLOAD_FILE_MAX_SIZE=2097152  # 2MB
 MAX_BATCH_SIZE=10
 
 # Database Configuration

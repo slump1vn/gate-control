@@ -21,17 +21,22 @@ There is no linter, formatter, or typecheck configured.
 
 - **`lpr_project/`** — Django project config (`settings.py`, `urls.py`, `wsgi.py`)
 - **`lpr_app/`** — The sole Django app containing all business logic
-  - `models.py` — `UploadedImage` and `ProcessingLog` models
-  - `views/` — API-only view subpackage: `api_views.py`, `file_views.py`
+  - `models.py` — `UploadedImage`, `ProcessingLog`; gate: `Vehicle`, `Camera`, `GateDevice`, `AccessEvent`, `GateConfigChange`
+  - `views/` — API-only view subpackage: `api_views.py`, `file_views.py`, `auth_views.py`, `gate_views.py`, `gate_admin_views.py`
   - `services/` — Business logic layer
     - `qwen_client.py` — OpenAI-compatible client for Qwen3-VL, prompt templates, coordinate conversion
     - `image_processor.py` / `image_processing_service.py` — Image handling
     - `bbox_visualizer.py` — Bounding box drawing
     - `api_service.py`, `file_service.py` — Service layer
   - `utils/` — Helpers: `validators.py`, `response_helpers.py`, `metrics_helpers.py`
-  - `management/commands/` — `setup_project`, `inspect_image`
+  - `management/commands/` — `setup_project`, `inspect_image`, `retry_stuck_images`, `purge_access_events`, `generate_gate_secrets`
+  - Gate automation: `services/gate_service.py` (decisions, command queue), `services/plate_matcher.py` + `utils/plates.py` (normalisation, registry matching), `services/camera_service.py` (presets, allowlist, connection test), `services/config_audit.py`, `views/gate_views.py` (agent/controller/operator runtime), `views/gate_admin_views.py` (cameras, devices, vehicles, events), `views/auth_views.py` (session login), `utils/auth.py` (roles `gate_admin`/`gate_operator`, agent/device tokens)
 - **`single-page-ui/`** — Next.js 16 SPA frontend (React 19, Tailwind CSS 4, Storybook 10)
+  - Gate pages: `/login`, `/gate` (status, STOP), `/vehicles`, `/events` (operators); `/manage/cameras`, `/manage/gates` (admins). Admin pages live under `/manage`, never `/admin`: `/admin/` is the Django admin
+  - `src/lib/gate-api.ts` — session-authenticated calls (`credentials: 'include'`, `X-CSRFToken` from the `/api/v1/auth/` response body); `src/components/AuthContext.tsx` + `RequireRole.tsx` guard pages client-side only, the API enforces roles
+  - Tests: `npx vitest run` runs every Storybook story in headless Chromium (needs `npx playwright install chromium` once)
 - **`canary/`** — Separate canary monitoring service (its own Dockerfile)
+- **`gate-agent/`** — Gate camera agent (own package, Dockerfile, CI workflow `gate-agent-publish.yml`, image `open-lpr-gate-agent`). Tests: `cd gate-agent && python -m unittest discover -s tests -t .`. See `gate-agent/README.md`
 - **`blackbox/`** — Blackbox exporter config for Prometheus probing
 
 ## Key Patterns & Gotchas
@@ -42,7 +47,7 @@ There is no linter, formatter, or typecheck configured.
 - Detection uses a two-phase pipeline: Phase 1 detects plate bounding boxes, Phase 2 runs OCR on cropped regions. Prompts are in `qwen_client.py`.
 - Bounding box coordinates arrive in Qwen2VL 0-1000 normalized range and must be converted via `convert_from_qwen2vl_format()`.
 - `UploadedImage` media is organized into `uploads/YYYY/MM/DD/` and `processed/YYYY/MM/DD/` subdirectories.
-- Django serves API-only (no templates, no web UI). The frontend is a separate Next.js SPA in `single-page-ui/`.
+- Django serves API-only (no templates, no web UI). The frontend is a separate Next.js SPA in `single-page-ui/`. The one exception is Django admin extensions for operators and installers: the gate "Test recognition" page (`lpr_app/templates/admin/lpr_app/gatedevice/test_gate.html`). Do not add user-facing Django templates.
 - `upload_to` path helpers in `models.py` generate date-partitioned upload paths.
 
 ## Docker
@@ -54,6 +59,7 @@ docker compose --profile core --profile cpu up -d          # CPU inference
 docker compose --profile core --profile nvidia-cuda up -d  # NVIDIA GPU
 docker compose --profile core --profile amd-vulkan up -d   # AMD Vulkan GPU
 docker compose --profile core up -d                        # External API only
+docker compose --profile core --profile cpu --profile gate up -d  # + gate camera agent
 ```
 
 - Images published to `ghcr.io/faisalthaheem/open-lpr`
@@ -77,7 +83,38 @@ Key variables (see `.env.example` and `.env.llamacpp.example` for full list):
 - `RATE_LIMIT_INCLUDE_PATHS` — Comma-separated URL paths to rate limit; all other paths are exempt (default: `/api/v1/ocr/`)
 - `DATABASE_PATH` — SQLite path (default: project root `db.sqlite3`)
 - `MEDIA_PATH` — Media storage (default: `./media`, Docker: `./container-media`)
-- `UPLOAD_FILE_MAX_SIZE` — Default 250KB in settings.py (10MB in Docker compose)
+- `UPLOAD_FILE_MAX_SIZE` — Maximum size per uploaded file in bytes (default: `2097152` = 2MB, same in settings.py, env examples and Docker compose). Also sets `FILE_UPLOAD_MAX_MEMORY_SIZE` so accepted uploads stay in memory
+
+### Admin login
+
+- `CSRF_TRUSTED_ORIGINS` — Origins allowed to make session-authenticated unsafe requests (default: same as `CORS_ALLOWED_ORIGINS`). CORS sends credentials for `CORS_ALLOWED_ORIGINS`, so the SPA can log in from another origin of the same site (e.g. a different port)
+- `SESSION_COOKIE_SECURE` — Mark session and CSRF cookies Secure; set `True` behind HTTPS (default: `False`)
+
+### Gate automation
+
+Barrier control from plate recognition (see `openspec/changes/2026-09-22-anpr-gate-automation/`). Camera address and credentials are **not** env vars — they are stored (encrypted) in the database and managed from the admin UI / Django admin.
+
+- `GATE_MODE` — `shadow` (decide and log, never actuate) or `live` (default: `shadow`; any other value is treated as shadow)
+- `GATE_AGENT_TOKEN` — Bearer token for the gate agent's endpoints; empty rejects all agent calls (default: empty)
+- `GATE_CONFIG_ENCRYPTION_KEY` — Fernet key encrypting camera passwords and controller tokens at rest; back it up (default: empty — secrets cannot be saved). Generate both secrets with `python manage.py generate_gate_secrets`
+- `GATE_CAMERA_ALLOWED_CIDRS` — Networks camera hosts must resolve into, checked on save and before the connection test connects (default: `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`)
+- `GATE_BURST_FRAMES` — Max frames per decision request (default: `3`)
+- `GATE_CONSENSUS_MIN` — Frames that must agree on a plate before it can be granted (default: `2`)
+- `GATE_MIN_CONFIDENCE` — Minimum OCR confidence among the agreeing frames (default: `0.80`)
+- `GATE_DECIDE_TIMEOUT` — Seconds a decision may take before it is denied as `inference_timeout` (default: `8`)
+- `GATE_WORKER_THREADS` — Frames recognised in parallel per Django worker process (default: `3`)
+- `GATE_COMMAND_TTL_SECONDS` — Manual commands not picked up by the agent within this time expire and are never sent (default: `15`)
+- `GATE_HEARTBEAT_TIMEOUT_SECONDS` — Controller is shown offline after this long without a heartbeat (default: `30`)
+- `GATE_EVENT_RETENTION_DAYS` — Access events and their frames are purged daily after this many days (default: `90`)
+- `GATE_AUTO_CLOSE` — `controller` (barrier's own timer) or `software`; `software` is refused for gates without `has_safety_input` (default: `controller`)
+- `GATE_AUTO_CLOSE_SECONDS` — Delay before a software close (default: `10`)
+
+Gate gotchas:
+- Gate frames are `UploadedImage` rows with `source='gate'`. They are excluded from the public image list/detail/download endpoints and from `retry_stuck_images`; serve them only via `/api/v1/gate/events/<id>/image/<type>/` (operator login).
+- The OpenAI client has no request timeout of its own (SDK default 600s). The gate decision bounds it with `GATE_DECIDE_TIMEOUT` in `gate_service.read_frames`; frames that finish late are deleted.
+- Django never contacts an ESP32 controller. The gate agent relays every command, including manual overrides (queued as `AccessEvent`s and claimed via `/api/v1/gate/agent-commands/`).
+- A gate with `controller_type='simulator'` is driven by `services/barrier_simulator.py`, served at `/api/v1/gate/sim/<id>/<command>` with the exact ESP32 contract. Simulated gates receive commands even in shadow mode (`gate_service.can_actuate`): shadow forbids *physical* actuation only. The Django admin page `/admin/lpr_app/gatedevice/<id>/test/` runs uploaded photos through the real decision pipeline (`is_test=True`, excluded from metrics) and animates the simulated arm.
+- Gate agent env vars (`LPR_API_URL`, `GATE_AGENT_TOKEN`, `AGENT_*`) are documented in `gate-agent/README.md`; `GATE_AGENT_METRICS_PORT` sets the published metrics port in compose (default `9101`).
 
 ### SPA Frontend (runtime via Docker environment)
 

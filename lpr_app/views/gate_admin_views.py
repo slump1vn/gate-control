@@ -1,0 +1,414 @@
+"""
+Gate management endpoints for the SPA.
+
+gate_admin: cameras, gate devices, configuration audit log
+gate_operator: vehicle registry, access event log
+
+Writes use the same forms and audited save helpers as the Django admin.
+PUT and PATCH are both partial: omitted fields keep their current values.
+"""
+
+import base64
+import logging
+
+from django.db.models import Q
+from django.forms.models import model_to_dict
+from django.http import JsonResponse
+from django.utils import timezone
+from django.utils.dateparse import parse_date
+from django.views.decorators.http import require_http_methods
+
+from ..forms import CameraForm, GateDeviceForm, VehicleForm
+from ..models import AccessEvent, Camera, GateConfigChange, GateDevice, Vehicle
+from ..services import barrier_simulator, camera_service, config_audit, gate_service
+from ..utils.auth import require_gate_admin, require_gate_operator
+from ..utils.gate_serializers import (
+    BadRequest, error, form_errors, json_body, paginate, serialize_camera,
+    serialize_config_change, serialize_event, serialize_gate, serialize_vehicle,
+)
+from ..utils.plates import clean_plate, normalize_plate
+from ..utils.secrets import SecretDecryptError, SecretKeyMissing
+
+logger = logging.getLogger(__name__)
+
+
+def _bound_form(form_class, body, instance=None, secret_field=None):
+    """
+    Build a form from a JSON body, merged over the instance's current values
+    (or the model defaults, for a new instance).
+    """
+    fields = form_class._meta.fields
+    data = model_to_dict(instance, fields=fields) if instance is not None else {}
+    for key, value in body.items():
+        if key in fields or key == secret_field:
+            data[key] = value
+    if 'roi' in body:
+        roi = body['roi'] or {}
+        for axis in ('x', 'y', 'w', 'h'):
+            data[f'roi_{axis}'] = roi.get(axis) if roi else None
+    return form_class(data=data, instance=instance)
+
+
+def _parse(request):
+    try:
+        return json_body(request), None
+    except BadRequest as exc:
+        return None, error(str(exc), 'INVALID_JSON')
+
+
+# ---------------------------------------------------------------------------
+# Cameras
+# ---------------------------------------------------------------------------
+
+@require_http_methods(["GET", "POST"])
+@require_gate_admin
+def api_cameras(request):
+    if request.method == 'GET':
+        cameras = Camera.objects.select_related('updated_by').prefetch_related('gates')
+        return JsonResponse({'results': [serialize_camera(c) for c in cameras]})
+
+    body, err = _parse(request)
+    if err:
+        return err
+    form = _bound_form(CameraForm, body, Camera(), secret_field='password')
+    if not form.is_valid():
+        return form_errors(form)
+    camera = config_audit.save_camera(form.instance, request.user, password=form.cleaned_data.get('password'))
+    return JsonResponse(serialize_camera(camera), status=201)
+
+
+@require_http_methods(["GET", "PUT", "PATCH", "DELETE"])
+@require_gate_admin
+def api_camera_detail(request, camera_id):
+    camera = Camera.objects.select_related('updated_by').filter(pk=camera_id).first()
+    if camera is None:
+        return error('Camera not found', 'NOT_FOUND', status=404)
+
+    if request.method == 'GET':
+        return JsonResponse(serialize_camera(camera))
+
+    if request.method == 'DELETE':
+        config_audit.delete_with_audit(camera, request.user)
+        return JsonResponse({'success': True})
+
+    body, err = _parse(request)
+    if err:
+        return err
+    form = _bound_form(CameraForm, body, camera, secret_field='password')
+    if not form.is_valid():
+        return form_errors(form)
+    camera = config_audit.save_camera(form.instance, request.user, password=form.cleaned_data.get('password'))
+    return JsonResponse(serialize_camera(camera))
+
+
+@require_http_methods(["GET"])
+@require_gate_admin
+def api_camera_presets(request):
+    return JsonResponse({'presets': camera_service.VENDOR_PRESETS})
+
+
+@require_http_methods(["POST"])
+@require_gate_admin
+def api_camera_test(request):
+    """
+    Test a saved camera, or unsaved form values (optionally over a saved
+    camera, whose stored password is used when none is given). The result is
+    recorded on the camera only when a saved camera is tested as-is.
+    """
+    body, err = _parse(request)
+    if err:
+        return err
+
+    camera_id = body.pop('camera_id', None)
+    instance = None
+    if camera_id is not None:
+        instance = Camera.objects.filter(pk=camera_id).first()
+        if instance is None:
+            return error('Camera not found', 'NOT_FOUND', status=404)
+
+    password = body.get('password') or ''
+    overrides = {k for k in body if k != 'password'}
+    form = _bound_form(CameraForm, body, instance or Camera(), secret_field='password')
+    if not form.is_valid():
+        return form_errors(form)
+    candidate = form.instance
+    camera_service.apply_preset(candidate)
+
+    if not password and instance is not None and instance.password_set:
+        try:
+            password = instance.get_password()
+        except (SecretKeyMissing, SecretDecryptError) as exc:
+            return error(f'Stored password cannot be read: {exc}', 'PASSWORD_UNAVAILABLE')
+
+    result = camera_service.test_connection(candidate, password)
+
+    recorded = instance is not None and not overrides and not body.get('password')
+    if recorded:
+        Camera.objects.filter(pk=instance.pk).update(
+            last_test_at=timezone.now(), last_test_ok=result.ok, last_test_error=result.error,
+        )
+    logger.info('Camera test for %s by %s: ok=%s %s', candidate.host, request.user, result.ok, result.error)
+
+    return JsonResponse({
+        'ok': result.ok,
+        'steps': [s.as_dict() for s in result.steps],
+        'image': 'data:image/jpeg;base64,' + base64.b64encode(result.image).decode() if result.image else None,
+        'recorded': recorded,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Gate devices
+# ---------------------------------------------------------------------------
+
+@require_http_methods(["GET", "POST"])
+@require_gate_admin
+def api_gate_devices(request):
+    if request.method == 'GET':
+        return JsonResponse({'results': [serialize_gate(g) for g in GateDevice.objects.select_related('camera')]})
+
+    body, err = _parse(request)
+    if err:
+        return err
+    form = _bound_form(GateDeviceForm, body, GateDevice(), secret_field='controller_token')
+    if not form.is_valid():
+        return form_errors(form)
+    gate = config_audit.save_gate_device(form.instance, request.user, token=form.cleaned_data.get('controller_token'))
+    return JsonResponse(serialize_gate(gate), status=201)
+
+
+@require_http_methods(["GET", "PUT", "PATCH", "DELETE"])
+@require_gate_admin
+def api_gate_device_detail(request, gate_id):
+    gate = GateDevice.objects.select_related('camera').filter(pk=gate_id).first()
+    if gate is None:
+        return error('Gate not found', 'NOT_FOUND', status=404)
+
+    if request.method == 'GET':
+        return JsonResponse(serialize_gate(gate))
+
+    if request.method == 'DELETE':
+        config_audit.delete_with_audit(gate, request.user)
+        return JsonResponse({'success': True})
+
+    body, err = _parse(request)
+    if err:
+        return err
+    form = _bound_form(GateDeviceForm, body, gate, secret_field='controller_token')
+    if not form.is_valid():
+        return form_errors(form)
+    gate = config_audit.save_gate_device(form.instance, request.user, token=form.cleaned_data.get('controller_token'))
+    return JsonResponse(serialize_gate(gate))
+
+
+@require_http_methods(["GET"])
+@require_gate_admin
+def api_config_changes(request):
+    queryset = GateConfigChange.objects.select_related('user')
+    if request.GET.get('object_type'):
+        queryset = queryset.filter(object_type=request.GET['object_type'])
+    if request.GET.get('object_id', '').isdigit():
+        queryset = queryset.filter(object_id=int(request.GET['object_id']))
+    try:
+        return paginate(request, queryset, serialize_config_change)
+    except BadRequest as exc:
+        return error(str(exc), 'INVALID_PARAMS')
+
+
+# ---------------------------------------------------------------------------
+# Vehicle registry
+# ---------------------------------------------------------------------------
+
+@require_http_methods(["GET", "POST"])
+@require_gate_operator
+def api_vehicles(request):
+    if request.method == 'GET':
+        queryset = Vehicle.objects.all()
+        q = request.GET.get('q', '').strip()
+        if q:
+            plate = clean_plate(q)
+            match = Q(owner_name__icontains=q) | Q(department__icontains=q) | Q(plate_display__icontains=q)
+            if plate:
+                match |= Q(plate_normalized__icontains=plate) | Q(plate_normalized=normalize_plate(q))
+            queryset = queryset.filter(match)
+        active = request.GET.get('is_active')
+        if active in ('true', 'false'):
+            queryset = queryset.filter(is_active=(active == 'true'))
+        try:
+            return paginate(request, queryset, serialize_vehicle)
+        except BadRequest as exc:
+            return error(str(exc), 'INVALID_PARAMS')
+
+    body, err = _parse(request)
+    if err:
+        return err
+    form = _bound_form(VehicleForm, body, Vehicle())
+    if not form.is_valid():
+        return form_errors(form)
+    vehicle = form.save()
+    logger.info('Vehicle %s added by %s', vehicle.plate_normalized, request.user)
+    return JsonResponse(serialize_vehicle(vehicle), status=201)
+
+
+@require_http_methods(["GET", "PUT", "PATCH", "DELETE"])
+@require_gate_operator
+def api_vehicle_detail(request, vehicle_id):
+    vehicle = Vehicle.objects.filter(pk=vehicle_id).first()
+    if vehicle is None:
+        return error('Vehicle not found', 'NOT_FOUND', status=404)
+
+    if request.method == 'GET':
+        return JsonResponse(serialize_vehicle(vehicle))
+
+    if request.method == 'DELETE':
+        # Deactivate rather than delete, so access events keep their reference
+        vehicle.is_active = False
+        vehicle.save(update_fields=['is_active', 'updated_at'])
+        logger.info('Vehicle %s deactivated by %s', vehicle.plate_normalized, request.user)
+        return JsonResponse(serialize_vehicle(vehicle))
+
+    body, err = _parse(request)
+    if err:
+        return err
+    form = _bound_form(VehicleForm, body, vehicle)
+    if not form.is_valid():
+        return form_errors(form)
+    vehicle = form.save()
+    return JsonResponse(serialize_vehicle(vehicle))
+
+
+@require_http_methods(["GET"])
+@require_gate_operator
+def api_plate_preview(request):
+    """Normalise a plate as the registry would, for live preview while typing."""
+    plate = request.GET.get('plate', '')
+    normalized = normalize_plate(plate)
+    existing = Vehicle.objects.filter(plate_normalized=normalized).first() if normalized else None
+    return JsonResponse({
+        'plate': plate,
+        'normalized': normalized,
+        'existing_vehicle': {'id': existing.id, 'plate_display': existing.plate_display} if existing else None,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Access events (read-only)
+# ---------------------------------------------------------------------------
+
+@require_http_methods(["GET"])
+@require_gate_operator
+def api_access_events(request):
+    queryset = AccessEvent.objects.select_related(
+        'gate', 'vehicle', 'near_miss_vehicle', 'operator', 'uploaded_image',
+    )
+    params = request.GET
+    if params.get('gate', '').isdigit():
+        queryset = queryset.filter(gate_id=int(params['gate']))
+    if params.get('decision'):
+        queryset = queryset.filter(decision=params['decision'])
+    if params.get('reason'):
+        queryset = queryset.filter(reason=params['reason'])
+    for param, lookup in (('date_from', 'timestamp__date__gte'), ('date_to', 'timestamp__date__lte')):
+        if params.get(param):
+            day = parse_date(params[param])
+            if day is None:
+                return error(f'{param} must be a date (YYYY-MM-DD)', 'INVALID_PARAMS')
+            queryset = queryset.filter(**{lookup: day})
+    if params.get('is_test') in ('true', 'false'):
+        queryset = queryset.filter(is_test=(params['is_test'] == 'true'))
+    plate = clean_plate(params.get('plate', ''))
+    if plate:
+        queryset = queryset.filter(Q(plate_normalized__icontains=plate) | Q(plate_raw__icontains=plate))
+    try:
+        return paginate(request, queryset, serialize_event)
+    except BadRequest as exc:
+        return error(str(exc), 'INVALID_PARAMS')
+
+
+@require_http_methods(["GET"])
+@require_gate_operator
+def api_access_event_detail(request, event_id):
+    event = AccessEvent.objects.select_related(
+        'gate', 'vehicle', 'near_miss_vehicle', 'operator', 'uploaded_image',
+    ).filter(pk=event_id).first()
+    if event is None:
+        return error('Event not found', 'NOT_FOUND', status=404)
+    data = serialize_event(event)
+    data['detections'] = event.uploaded_image.get_detection_results() if event.uploaded_image else None
+    return JsonResponse(data)
+
+
+# ---------------------------------------------------------------------------
+# Gate testing (admin): recognition from uploaded photos, simulated barrier
+# ---------------------------------------------------------------------------
+
+def run_test_decision(gate, frames):
+    """
+    Run the real decision pipeline on uploaded photos as a test event. A grant
+    drives the gate's simulated barrier in-process; a real controller is never
+    actuated from a test.
+    """
+    decision = gate_service.decide(gate.id, frames, is_test=True)
+    event = decision.event
+    simulator, note = None, None
+    if decision.actuate and gate.is_simulated:
+        simulator = gate_service.run_on_simulator(event)
+        event.refresh_from_db()
+    elif decision.outcome.granted and not gate.is_simulated:
+        AccessEvent.objects.filter(pk=event.pk).update(command_result='not_sent_test')
+        event.refresh_from_db()
+        note = 'Test decisions only drive simulated barriers; the real controller was not actuated.'
+    if gate.is_simulated and simulator is None:
+        simulator = barrier_simulator.refresh(gate)
+    return event, simulator, note
+
+
+@require_http_methods(["POST"])
+@require_gate_admin
+def api_gate_test_decide(request, gate_id):
+    from .gate_views import validate_frames
+
+    gate = GateDevice.objects.filter(pk=gate_id).first()
+    if gate is None:
+        return error('Gate not found', 'NOT_FOUND', status=404)
+    frames, frames_error = validate_frames(request)
+    if frames_error:
+        return frames_error
+    event, simulator, note = run_test_decision(gate, frames)
+    event = AccessEvent.objects.select_related(
+        'gate', 'vehicle', 'near_miss_vehicle', 'operator', 'uploaded_image',
+    ).get(pk=event.pk)
+    return JsonResponse({
+        'event': serialize_event(event),
+        'simulator': simulator,
+        'note': note,
+    })
+
+
+@require_http_methods(["GET", "POST"])
+def api_gate_simulator(request, gate_id):
+    """GET: simulated arm state (operator). POST {command}: drive it now (admin)."""
+    from ..utils.auth import GATE_ADMIN, GATE_OPERATOR, forbidden, user_roles
+
+    roles = user_roles(request.user)
+    needed = GATE_OPERATOR if request.method == 'GET' else GATE_ADMIN
+    if needed not in roles:
+        return forbidden()
+
+    gate = GateDevice.objects.filter(pk=gate_id, controller_type='simulator').first()
+    if gate is None:
+        return error('Simulated gate not found', 'NOT_FOUND', status=404)
+    if request.method == 'GET':
+        return JsonResponse(barrier_simulator.refresh(gate))
+
+    body, err = _parse(request)
+    if err:
+        return err
+    command = body.get('command')
+    if command not in gate_service.COMMANDS:
+        return error(f'command must be one of {", ".join(gate_service.COMMANDS)}', 'INVALID_COMMAND')
+    event = gate_service.create_override(gate, command, request.user, is_test=True)
+    gate_service.run_on_simulator(event)
+    event.refresh_from_db()
+    state = barrier_simulator.refresh(gate)
+    return JsonResponse({'event': serialize_event(event), 'simulator': state})

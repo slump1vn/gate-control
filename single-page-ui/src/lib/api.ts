@@ -56,7 +56,7 @@ export async function getMaxUploadBytes(): Promise<number> {
       return _maxUploadBytes;
     }
   } catch {}
-  _maxUploadBytes = 1048576;
+  _maxUploadBytes = 2097152;
   return _maxUploadBytes;
 }
 

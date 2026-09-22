@@ -8,3 +8,7 @@ logger = logging.getLogger(__name__)
 
 def run_retry_stuck_images():
     call_command('retry_stuck_images')
+
+
+def run_purge_access_events():
+    call_command('purge_access_events')

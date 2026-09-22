@@ -140,6 +140,101 @@ CANARY_PROCESSING_DURATION = Histogram(
 )
 
 
+# Gate Metrics
+# Counters are not file-persisted: rate()/increase() handle restarts, and the
+# AccessEvent table is the durable record. Liveness gauges are computed at scrape.
+GATE_DECISIONS_TOTAL = Counter(
+    'lpr_gate_decisions_total',
+    'Gate access decisions',
+    ['gate', 'decision', 'reason'],
+    registry=REGISTRY
+)
+
+GATE_DECISION_DURATION = Histogram(
+    'lpr_gate_decision_duration_seconds',
+    'Time from decision request to decision',
+    ['gate'],
+    buckets=[0.5, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, float('inf')],
+    registry=REGISTRY
+)
+
+GATE_COMMANDS_TOTAL = Counter(
+    'lpr_gate_commands_total',
+    'Barrier commands relayed to gate controllers',
+    ['gate', 'command', 'result'],  # result: ok, failed, expired
+    registry=REGISTRY
+)
+
+GATE_CONTROLLER_UP = Gauge(
+    'lpr_gate_controller_up',
+    'Whether the gate controller heartbeat is current (1) or missing (0)',
+    ['gate'],
+    registry=REGISTRY
+)
+
+GATE_CAMERA_STREAMING = Gauge(
+    'lpr_gate_camera_streaming',
+    'Whether the gate agent reports the camera as streaming (1) or not (0)',
+    ['camera'],
+    registry=REGISTRY
+)
+
+GATE_ARM_UP = Gauge(
+    'lpr_gate_arm_up',
+    'Whether the barrier arm is reported up (1) or not (0)',
+    ['gate'],
+    registry=REGISTRY
+)
+
+# Agent status reports older than this are treated as not streaming
+GATE_CAMERA_STATUS_MAX_AGE_SECONDS = 120
+
+
+def _gate_label(gate):
+    return gate.name if gate is not None else 'unknown'
+
+
+def record_gate_decision(event):
+    """Count a decision and its latency."""
+    try:
+        gate = _gate_label(event.gate)
+        GATE_DECISIONS_TOTAL.labels(gate=gate, decision=event.decision, reason=event.reason).inc()
+        if event.decision_latency_ms is not None:
+            GATE_DECISION_DURATION.labels(gate=gate).observe(event.decision_latency_ms / 1000.0)
+    except Exception:
+        logger.exception('Failed to record gate decision metric')
+
+
+def record_gate_command(event, result):
+    try:
+        GATE_COMMANDS_TOTAL.labels(gate=_gate_label(event.gate), command=event.command, result=result).inc()
+    except Exception:
+        logger.exception('Failed to record gate command metric')
+
+
+def update_gate_metrics(now=None):
+    """Refresh controller and camera liveness gauges from the database."""
+    try:
+        from django.utils import timezone
+        from .models import Camera, GateDevice
+
+        now = now or timezone.now()
+        from .services import barrier_simulator
+
+        for gate in GateDevice.objects.all():
+            if gate.is_simulated:
+                barrier_simulator.refresh(gate, now)
+            GATE_CONTROLLER_UP.labels(gate=gate.name).set(1 if gate.is_online(now) else 0)
+            GATE_ARM_UP.labels(gate=gate.name).set(1 if gate.arm_state == 'up' else 0)
+        for camera in Camera.objects.filter(is_enabled=True):
+            fresh = camera.agent_status_at and (now - camera.agent_status_at).total_seconds() <= GATE_CAMERA_STATUS_MAX_AGE_SECONDS
+            GATE_CAMERA_STREAMING.labels(camera=camera.name).set(
+                1 if fresh and camera.agent_status == 'streaming' else 0
+            )
+    except Exception:
+        logger.exception('Failed to update gate metrics')
+
+
 def load_metrics_from_file():
     """Load metrics values from persistent storage file"""
     try:
@@ -342,6 +437,7 @@ def get_metrics_response():
     """Generate HTTP response with Prometheus metrics"""
     # Update dynamic metrics before generating response
     update_system_metrics()
+    update_gate_metrics()
     
     # Generate metrics using our custom registry
     metrics_data = generate_latest(REGISTRY)

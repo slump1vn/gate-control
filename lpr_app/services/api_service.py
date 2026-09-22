@@ -68,30 +68,42 @@ class ApiService:
                 'error_code': 'MISSING_IMAGE'
             }, status=400)
         
-        uploaded_file = request.FILES['image']
-        
+        error_response = ApiService.validate_image_file(request.FILES['image'])
+        if error_response:
+            return False, error_response
+
+        return True, None
+
+    @staticmethod
+    def validate_image_file(uploaded_file) -> Optional[JsonResponse]:
+        """
+        Validate one uploaded image's type and size.
+
+        Returns:
+            None if valid, otherwise a 400 JsonResponse
+        """
         # Validate file type - use more robust detection
         content_type = uploaded_file.content_type or mimetypes.guess_type(uploaded_file.name)[0]
-        
+
         allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp']
         if content_type not in allowed_types:
-            return False, JsonResponse({
+            return JsonResponse({
                 'success': False,
                 'error': f'Unsupported file type: {content_type}',
                 'error_code': 'INVALID_FILE_TYPE'
             }, status=400)
-        
+
         max_size = settings.UPLOAD_FILE_MAX_SIZE
         if uploaded_file.size > max_size:
             max_display = max_size / (1024 * 1024) if max_size >= 1024 * 1024 else max_size / 1024
             unit = 'MB' if max_size >= 1024 * 1024 else 'KB'
-            return False, JsonResponse({
+            return JsonResponse({
                 'success': False,
                 'error': f'File too large. Maximum size is {max_display:.1f}{unit}',
                 'error_code': 'FILE_TOO_LARGE'
             }, status=400)
-        
-        return True, None
+
+        return None
     
     @staticmethod
     def determine_save_image_setting(request, is_canary: bool) -> bool:

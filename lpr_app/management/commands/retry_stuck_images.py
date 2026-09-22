@@ -44,7 +44,7 @@ class Command(BaseCommand):
         stuck_images = UploadedImage.objects.filter(
             processing_status__in=('processing', 'pending'),
             upload_timestamp__lt=cutoff,
-        )[:batch_size]
+        ).exclude(source='gate')[:batch_size]
 
         retried = 0
         exhausted = 0

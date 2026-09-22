@@ -19,7 +19,7 @@ export default function UploadForm({ onSuccess, onError, onUploadStart, disabled
   const [fileSize, setFileSize] = useState<number>(0);
   const [state, setState] = useState<UploadState>('idle');
   const [elapsed, setElapsed] = useState(0);
-  const [maxUploadBytes, setMaxUploadBytes] = useState<number>(1048576);
+  const [maxUploadBytes, setMaxUploadBytes] = useState<number>(2097152);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 

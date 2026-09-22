@@ -2,8 +2,14 @@ import os
 import uuid
 
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.core.files.storage import default_storage
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.conf import settings
+from django.utils import timezone
+
+from .utils.plates import normalize_plate
+from .utils.secrets import decrypt_secret, encrypt_secret
 
 
 def _guid_filename(filename):
@@ -82,6 +88,17 @@ class UploadedImage(models.Model):
     max_retries = models.PositiveIntegerField(
         default=2,
         verbose_name="Max Retries"
+    )
+    source = models.CharField(
+        max_length=10,
+        choices=[
+            ('upload', 'Upload'),
+            ('gate', 'Gate Camera'),
+        ],
+        default='upload',
+        db_index=True,
+        verbose_name="Source",
+        help_text="Gate camera frames are excluded from the public image endpoints.",
     )
     
     class Meta:
@@ -232,3 +249,359 @@ class ProcessingLog(models.Model):
     
     def __str__(self):
         return f"{self.uploaded_image.filename} - {self.status} - {self.timestamp}"
+
+
+# ---------------------------------------------------------------------------
+# Gate automation
+# ---------------------------------------------------------------------------
+
+_port_validators = [MinValueValidator(1), MaxValueValidator(65535)]
+_unit_validators = [MinValueValidator(0.0), MaxValueValidator(1.0)]
+
+
+class Vehicle(models.Model):
+    """A vehicle authorised to pass the gate."""
+
+    VEHICLE_TYPES = [
+        ('car', 'Car'),
+        ('motorbike', 'Motorbike'),
+        ('other', 'Other'),
+    ]
+
+    plate_normalized = models.CharField(max_length=20, unique=True, editable=False)
+    plate_display = models.CharField(max_length=32, verbose_name="Plate Number")
+    owner_name = models.CharField(max_length=255)
+    owner_phone = models.CharField(max_length=32, blank=True)
+    department = models.CharField(max_length=255, blank=True)
+    vehicle_type = models.CharField(max_length=16, choices=VEHICLE_TYPES, default='car')
+    valid_from = models.DateTimeField(null=True, blank=True)
+    valid_until = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Vehicle"
+        verbose_name_plural = "Vehicles"
+        ordering = ['plate_normalized']
+
+    def __str__(self):
+        return f"{self.plate_display} ({self.owner_name})"
+
+    def clean(self):
+        normalized = normalize_plate(self.plate_display)
+        if not normalized:
+            raise ValidationError({'plate_display': 'Plate number is required.'})
+        conflict = Vehicle.objects.filter(plate_normalized=normalized).exclude(pk=self.pk).first()
+        if conflict:
+            raise ValidationError({
+                'plate_display': f'Plate matches existing vehicle {conflict.plate_display} '
+                                 f'(id {conflict.pk}) after normalisation.'
+            })
+        if self.valid_from and self.valid_until and self.valid_until <= self.valid_from:
+            raise ValidationError({'valid_until': 'Must be after valid_from.'})
+
+    def save(self, *args, **kwargs):
+        self.plate_normalized = normalize_plate(self.plate_display)
+        super().save(*args, **kwargs)
+
+    def access_status(self, at=None):
+        """Return (allowed, reason) for this vehicle at the given time."""
+        at = at or timezone.now()
+        if not self.is_active:
+            return False, 'inactive'
+        if self.valid_from and at < self.valid_from:
+            return False, 'not_yet_valid'
+        if self.valid_until and at >= self.valid_until:
+            return False, 'expired'
+        return True, 'whitelist_hit'
+
+
+class Camera(models.Model):
+    """An IP camera watching a gate lane, managed from the admin UI."""
+
+    VENDORS = [
+        ('hikvision', 'Hikvision'),
+        ('dahua', 'Dahua'),
+        ('generic', 'Generic'),
+    ]
+
+    name = models.CharField(max_length=100)
+    is_enabled = models.BooleanField(default=True)
+    host = models.CharField(max_length=255)
+    rtsp_port = models.PositiveIntegerField(default=554, validators=_port_validators)
+    http_port = models.PositiveIntegerField(default=80, validators=_port_validators)
+    username = models.CharField(max_length=100, blank=True)
+    password_encrypted = models.TextField(blank=True, editable=False)
+    vendor = models.CharField(max_length=16, choices=VENDORS, default='generic')
+    main_stream_path = models.CharField(max_length=255, blank=True)
+    sub_stream_path = models.CharField(max_length=255, blank=True)
+    snapshot_path = models.CharField(max_length=255, blank=True)
+    prefer_snapshot = models.BooleanField(default=True)
+    roi_x = models.FloatField(null=True, blank=True, validators=_unit_validators)
+    roi_y = models.FloatField(null=True, blank=True, validators=_unit_validators)
+    roi_w = models.FloatField(null=True, blank=True, validators=_unit_validators)
+    roi_h = models.FloatField(null=True, blank=True, validators=_unit_validators)
+    motion_threshold = models.FloatField(default=0.02, validators=_unit_validators)
+    settle_ms = models.PositiveIntegerField(default=800)
+    cooldown_s = models.PositiveIntegerField(default=5)
+    config_version = models.PositiveIntegerField(default=1, editable=False)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+', editable=False,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_test_at = models.DateTimeField(null=True, blank=True, editable=False)
+    last_test_ok = models.BooleanField(null=True, blank=True, editable=False)
+    last_test_error = models.TextField(blank=True, editable=False)
+    agent_status = models.CharField(max_length=20, blank=True, editable=False)
+    agent_status_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        verbose_name = "Camera"
+        verbose_name_plural = "Cameras"
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.host})"
+
+    @property
+    def password_set(self):
+        return bool(self.password_encrypted)
+
+    def set_password(self, raw):
+        self.password_encrypted = encrypt_secret(raw) if raw else ''
+
+    def get_password(self):
+        return decrypt_secret(self.password_encrypted)
+
+    @property
+    def roi(self):
+        values = (self.roi_x, self.roi_y, self.roi_w, self.roi_h)
+        if any(v is None for v in values):
+            return None
+        return dict(zip(('x', 'y', 'w', 'h'), values))
+
+    def clean(self):
+        roi = (self.roi_x, self.roi_y, self.roi_w, self.roi_h)
+        if any(v is not None for v in roi):
+            if any(v is None for v in roi):
+                raise ValidationError('ROI requires all of roi_x, roi_y, roi_w and roi_h.')
+            if self.roi_w <= 0 or self.roi_h <= 0:
+                raise ValidationError('ROI width and height must be positive.')
+            if self.roi_x + self.roi_w > 1.0 + 1e-6 or self.roi_y + self.roi_h > 1.0 + 1e-6:
+                raise ValidationError('ROI must lie within the image.')
+
+
+class GateDevice(models.Model):
+    """A barrier gate: its camera and its ESP32 relay controller."""
+
+    DIRECTIONS = [
+        ('in', 'Entry'),
+        ('out', 'Exit'),
+    ]
+    CONTROLLER_TYPES = [
+        ('esp32', 'ESP32 relay controller'),
+        ('simulator', 'Simulated barrier (no hardware)'),
+    ]
+    ARM_STATES = [
+        ('up', 'Up'),
+        ('down', 'Down'),
+        ('moving', 'Moving'),
+        ('stopped', 'Stopped'),
+        ('unknown', 'Unknown'),
+    ]
+
+    name = models.CharField(max_length=100, unique=True)
+    location = models.CharField(max_length=255, blank=True)
+    direction = models.CharField(max_length=4, choices=DIRECTIONS, default='in')
+    camera = models.ForeignKey(
+        Camera, null=True, blank=True, on_delete=models.SET_NULL, related_name='gates',
+    )
+    controller_type = models.CharField(
+        max_length=10, choices=CONTROLLER_TYPES, default='esp32',
+        help_text='A simulated barrier receives commands even in shadow mode, since it moves no hardware.',
+    )
+    controller_url = models.URLField(blank=True)
+    controller_token_encrypted = models.TextField(blank=True, editable=False)
+    has_safety_input = models.BooleanField(
+        default=False,
+        help_text="A loop detector or IR beam is wired to the barrier controller's safety input.",
+    )
+    is_enabled = models.BooleanField(default=True)
+    last_seen = models.DateTimeField(null=True, blank=True, editable=False)
+    firmware_version = models.CharField(max_length=50, blank=True, editable=False)
+    last_command_result = models.CharField(max_length=100, blank=True, editable=False)
+    arm_state = models.CharField(max_length=10, choices=ARM_STATES, blank=True, editable=False)
+    arm_state_at = models.DateTimeField(null=True, blank=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Gate Device"
+        verbose_name_plural = "Gate Devices"
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def controller_token_set(self):
+        return bool(self.controller_token_encrypted)
+
+    def set_controller_token(self, raw):
+        self.controller_token_encrypted = encrypt_secret(raw) if raw else ''
+
+    def get_controller_token(self):
+        return decrypt_secret(self.controller_token_encrypted)
+
+    @property
+    def is_simulated(self):
+        return self.controller_type == 'simulator'
+
+    def is_online(self, now=None):
+        if self.is_simulated:
+            return True
+        if not self.last_seen:
+            return False
+        now = now or timezone.now()
+        timeout = getattr(settings, 'GATE_HEARTBEAT_TIMEOUT_SECONDS', 30)
+        return (now - self.last_seen).total_seconds() <= timeout
+
+
+class AccessEvent(models.Model):
+    """One gate decision: automatic grant/deny or a manual override."""
+
+    DECISIONS = [
+        ('granted', 'Granted'),
+        ('denied', 'Denied'),
+        ('manual', 'Manual'),
+    ]
+    REASONS = [
+        ('whitelist_hit', 'Registered vehicle'),
+        ('no_plate', 'No plate detected'),
+        ('no_consensus', 'Frames disagree'),
+        ('low_confidence', 'Low confidence'),
+        ('not_registered', 'Not registered'),
+        ('expired', 'Registration expired'),
+        ('not_yet_valid', 'Registration not yet valid'),
+        ('inactive', 'Registration inactive'),
+        ('device_disabled', 'Gate disabled'),
+        ('inference_timeout', 'Recognition timed out'),
+        ('processing_error', 'Recognition failed'),
+        ('manual_override', 'Manual override'),
+    ]
+
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    gate = models.ForeignKey(
+        GateDevice, null=True, blank=True, on_delete=models.SET_NULL, related_name='events',
+    )
+    plate_raw = models.CharField(max_length=64, blank=True)
+    plate_normalized = models.CharField(max_length=20, blank=True, db_index=True)
+    confidence = models.FloatField(null=True, blank=True)
+    frames_read = models.PositiveIntegerField(default=0)
+    frames_agreed = models.PositiveIntegerField(default=0)
+    vehicle = models.ForeignKey(
+        Vehicle, null=True, blank=True, on_delete=models.SET_NULL, related_name='events',
+    )
+    near_miss_vehicle = models.ForeignKey(
+        Vehicle, null=True, blank=True, on_delete=models.SET_NULL, related_name='near_miss_events',
+    )
+    decision = models.CharField(max_length=10, choices=DECISIONS, db_index=True)
+    reason = models.CharField(max_length=24, choices=REASONS, db_index=True)
+    mode = models.CharField(max_length=10, default='shadow')
+    uploaded_image = models.ForeignKey(
+        UploadedImage, null=True, blank=True, on_delete=models.SET_NULL, related_name='access_events',
+    )
+    command = models.CharField(max_length=10, blank=True)
+    command_sent = models.BooleanField(default=False)
+    command_result = models.CharField(max_length=100, blank=True)
+    decision_latency_ms = models.PositiveIntegerField(null=True, blank=True)
+    operator = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+',
+    )
+    is_test = models.BooleanField(
+        default=False, db_index=True,
+        help_text='Created from the admin gate test page, not by a vehicle at the gate.',
+    )
+
+    class Meta:
+        verbose_name = "Access Event"
+        verbose_name_plural = "Access Events"
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f"{self.timestamp:%Y-%m-%d %H:%M:%S} {self.plate_normalized or '-'} {self.decision}"
+
+
+class SimulatedBarrier(models.Model):
+    """
+    State of a simulated barrier arm for a gate whose controller_type is
+    'simulator'. Motion is computed from timestamps, so no background process
+    is needed: the state advances whenever it is read.
+    """
+
+    PHASES = [
+        ('down', 'Down'),
+        ('moving_up', 'Moving up'),
+        ('up', 'Up'),
+        ('moving_down', 'Moving down'),
+        ('stopped', 'Stopped'),
+    ]
+
+    gate = models.OneToOneField(GateDevice, on_delete=models.CASCADE, related_name='simulator')
+    travel_seconds = models.FloatField(
+        default=3.0, validators=[MinValueValidator(0.1), MaxValueValidator(60.0)],
+        help_text='Time for the arm to travel fully up or down.',
+    )
+    auto_close_seconds = models.PositiveIntegerField(
+        default=10,
+        help_text="Close automatically this long after reaching the top, like the controller's TIMING setting. 0 disables.",
+    )
+    phase = models.CharField(max_length=12, choices=PHASES, default='down', editable=False)
+    phase_started_at = models.DateTimeField(default=timezone.now, editable=False)
+    start_position = models.FloatField(default=0.0, editable=False)
+    last_nonce = models.BigIntegerField(default=0, editable=False)
+    last_motion_command = models.CharField(max_length=10, blank=True, editable=False)
+    last_motion_command_at = models.DateTimeField(null=True, blank=True, editable=False)
+    history = models.JSONField(default=list, blank=True, editable=False)
+
+    class Meta:
+        verbose_name = "Simulated Barrier"
+        verbose_name_plural = "Simulated Barriers"
+
+    def __str__(self):
+        return f"Simulated barrier for {self.gate.name}"
+
+
+class GateConfigChange(models.Model):
+    """Audit trail of changes to cameras and gate devices."""
+
+    ACTIONS = [
+        ('create', 'Created'),
+        ('update', 'Updated'),
+        ('delete', 'Deleted'),
+    ]
+
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+',
+    )
+    object_type = models.CharField(max_length=20)
+    object_id = models.PositiveIntegerField()
+    object_repr = models.CharField(max_length=255, blank=True)
+    action = models.CharField(max_length=10, choices=ACTIONS)
+    changes = models.JSONField(default=dict)
+
+    class Meta:
+        verbose_name = "Gate Config Change"
+        verbose_name_plural = "Gate Config Changes"
+        ordering = ['-timestamp']
+        indexes = [models.Index(fields=['object_type', 'object_id'])]
+
+    def __str__(self):
+        return f"{self.timestamp:%Y-%m-%d %H:%M} {self.action} {self.object_type} {self.object_id}"

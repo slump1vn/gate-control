@@ -1,0 +1,5 @@
+requests>=2.31,<3
+prometheus-client>=0.19
+Pillow>=10
+# Only needed for cameras without a snapshot endpoint (RTSP)
+opencv-python-headless>=4.8

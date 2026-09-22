@@ -35,7 +35,8 @@ class FileService:
         Raises:
             Http404: If image or file not found
         """
-        uploaded_image = get_object_or_404(UploadedImage, id=image_id)
+        # Gate camera frames are only served through authenticated gate endpoints
+        uploaded_image = get_object_or_404(UploadedImage.objects.exclude(source='gate'), id=image_id)
         
         if image_type == 'original':
             image_path = uploaded_image.original_image.path

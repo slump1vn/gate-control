@@ -3,6 +3,7 @@ import "./globals.css";
 import DisclaimerBanner from "./disclaimer-banner";
 import AppInitializer from "@/components/AppInitializer";
 import { HealthProvider } from "@/components/HealthContext";
+import { AuthProvider } from "@/components/AuthContext";
 import Navbar from "@/components/Navbar";
 
 export const metadata: Metadata = {
@@ -36,6 +37,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-white text-gray-900 dark:bg-[#0f0f0f] dark:text-gray-100 transition-colors duration-300">
       <AppInitializer>
         <HealthProvider>
+        <AuthProvider>
         <Navbar />
 
         <DisclaimerBanner />
@@ -74,6 +76,7 @@ export default function RootLayout({
           </div>
         </footer>
 
+        </AuthProvider>
         </HealthProvider>
       </AppInitializer>
       </body>

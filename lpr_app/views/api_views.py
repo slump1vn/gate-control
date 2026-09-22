@@ -237,7 +237,7 @@ def _serialize_image_summary(img):
 
 @require_http_methods(["GET"])
 def api_image_list(request):
-    queryset = UploadedImage.objects.all()
+    queryset = UploadedImage.objects.exclude(source='gate')
 
     query = request.GET.get('query')
     if query:
@@ -282,7 +282,7 @@ def api_image_list(request):
 @require_http_methods(["GET"])
 def api_image_detail(request, image_id):
     try:
-        img = UploadedImage.objects.get(id=image_id)
+        img = UploadedImage.objects.exclude(source='gate').get(id=image_id)
     except UploadedImage.DoesNotExist:
         return JsonResponse({'error': 'Image not found'}, status=404)
 
