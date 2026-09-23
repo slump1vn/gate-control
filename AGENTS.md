@@ -46,7 +46,7 @@ There is no linter, formatter, or typecheck configured.
 - Two env file modes: `.env` for external API, `.env.llamacpp` for bundled LlamaCpp inference. Docker Compose reads `.env.llamacpp` by default.
 - The AI client (`QwenVLClient`) wraps the `openai` Python SDK. It calls any OpenAI-compatible endpoint (LlamaCpp, vLLM, remote API).
 - Detection uses a two-phase pipeline: Phase 1 detects plate bounding boxes, Phase 2 runs OCR on cropped regions. Prompts are in `qwen_client.py`.
-- Bounding box coordinates arrive in Qwen2VL 0-1000 normalized range and must be converted via `convert_from_qwen2vl_format()`.
+- Bounding box coordinates arrive in Qwen2VL 0-1000 normalized range and must be converted via `convert_from_qwen2vl_format()`. Because they are normalized, upscaling a crop before sending it does not affect the mapping back to the original image.
 - `UploadedImage` media is organized into `uploads/YYYY/MM/DD/` and `processed/YYYY/MM/DD/` subdirectories.
 - Django serves API-only (no templates, no web UI). The frontend is a separate Next.js SPA in `single-page-ui/`. The one exception is Django admin extensions for operators and installers: the gate "Test recognition" page (`lpr_app/templates/admin/lpr_app/gatedevice/test_gate.html`). Do not add user-facing Django templates.
 - `upload_to` path helpers in `models.py` generate date-partitioned upload paths.
@@ -84,6 +84,7 @@ Key variables (see `.env.example` and `.env.llamacpp.example` for full list):
 - `RATE_LIMIT_RATE` — Throttle rate in `num/period` format, e.g. `2/min` (default: `2/min`)
 - `RATE_LIMIT_EXCLUDE_PATHS` — Comma-separated URL paths excluded from rate limiting (default: `/health/,/api/v1/health-light/`)
 - `RATE_LIMIT_INCLUDE_PATHS` — Comma-separated URL paths to rate limit; all other paths are exempt (default: `/api/v1/ocr/`)
+- `OCR_CROP_MIN_WIDTH` — Plate crops narrower than this are upscaled (LANCZOS, at most 4x) before the OCR phase; `0` disables (default: `480`). A plate only ~120px wide gives the model too few pixels per character and digits get confused
 - `TIME_ZONE` — Server timezone for Django admin timestamps and the nightly purge job (default: `Asia/Ho_Chi_Minh`). The SPA shows times in the viewer's own timezone
 - `LPR_IMAGE_PREFIX` — Image prefix used by all Compose files (default: `ghcr.io/slump1vn/gate-control`)
 - `DATABASE_PATH` — SQLite path (default: project root `db.sqlite3`)

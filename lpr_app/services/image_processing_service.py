@@ -167,7 +167,10 @@ class ImageProcessingService:
                 # Encode all crops to base64
                 base64_crops = []
                 for crop_path in crop_paths:
-                    base64_crop = ImageProcessor.encode_image_to_base64(crop_path)
+                    # Coordinates come back normalised 0-1000, so upscaling here
+                    # does not affect the mapping back to the original image.
+                    base64_crop = ImageProcessor.encode_image_to_base64(
+                        crop_path, min_width=settings.OCR_CROP_MIN_WIDTH)
                     if base64_crop:
                         base64_crops.append(base64_crop)
                     else:

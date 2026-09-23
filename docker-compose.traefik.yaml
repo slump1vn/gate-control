@@ -70,6 +70,7 @@ services:
       - SECRET_KEY=${SECRET_KEY:-django-insecure-change-me-in-production}
       - DEBUG=${DEBUG:-False}
       - TIME_ZONE=${TIME_ZONE:-Asia/Ho_Chi_Minh}
+      - OCR_CROP_MIN_WIDTH=${OCR_CROP_MIN_WIDTH:-480}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,lpr-app}
       
       # Rate Limiting

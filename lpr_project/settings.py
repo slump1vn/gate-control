@@ -171,6 +171,9 @@ MIDDLEWARE.append('lpr_app.middleware.rate_limit.RateLimitMiddleware')
 
 OCR_CROP_PADDING_PX = config('OCR_CROP_PADDING_PX', default=25, cast=int)
 
+# Plate crops narrower than this are enlarged before OCR (0 disables)
+OCR_CROP_MIN_WIDTH = config('OCR_CROP_MIN_WIDTH', default=480, cast=int)
+
 PROCESSING_TIMEOUT_MINUTES = config('PROCESSING_TIMEOUT_MINUTES', default=5, cast=int)
 MAX_RETRIES = config('MAX_RETRIES', default=2, cast=int)
 RETRY_BATCH_SIZE = config('RETRY_BATCH_SIZE', default=5, cast=int)

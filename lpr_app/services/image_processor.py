@@ -1,4 +1,5 @@
 import base64
+import io
 import logging
 import os
 from typing import Optional, Tuple
@@ -60,17 +61,27 @@ class ImageProcessor:
         return os.path.splitext(filename)[1].lstrip('.').lower()
     
     @staticmethod
-    def encode_image_to_base64(image_path: str) -> Optional[str]:
+    def encode_image_to_base64(image_path: str, min_width: int = 0) -> Optional[str]:
         """
         Encode image file to base64 string
-        
+
         Args:
             image_path: Path to the image file
-            
+            min_width: Upscale the image to at least this width before encoding
+                       (0 disables). Used for plate crops: a plate only ~120px
+                       wide gives the model too few pixels per character, and
+                       digits such as 2, 3 and 7 get confused. Upscaling adds no
+                       detail but lets the model see the strokes it does have.
+
         Returns:
             Base64 encoded string or None if error occurs
         """
         try:
+            if min_width:
+                upscaled = ImageProcessor._upscale_to_width(image_path, min_width)
+                if upscaled is not None:
+                    return base64.b64encode(upscaled).decode("utf-8")
+
             with open(image_path, "rb") as image_file:
                 base64_string = base64.b64encode(image_file.read()).decode("utf-8")
                 logger.info(f"Successfully encoded image: {image_path}")
@@ -83,6 +94,33 @@ class ImageProcessor:
             logger.error(f"Error encoding image {image_path}: {str(e)}")
             return None
     
+    # Beyond this the image is mostly interpolation and only costs tokens
+    UPSCALE_MAX_FACTOR = 4.0
+
+    @staticmethod
+    def _upscale_to_width(image_path: str, min_width: int) -> Optional[bytes]:
+        """
+        Return JPEG bytes of the image enlarged to min_width, or None when it is
+        already wide enough or cannot be read (the caller then sends it as-is).
+        """
+        try:
+            with Image.open(image_path) as img:
+                if img.width <= 0 or img.width >= min_width:
+                    return None
+                factor = min(min_width / img.width, ImageProcessor.UPSCALE_MAX_FACTOR)
+                size = (max(1, round(img.width * factor)), max(1, round(img.height * factor)))
+                resized = img.convert('RGB').resize(size, Image.Resampling.LANCZOS)
+                buffer = io.BytesIO()
+                resized.save(buffer, format='JPEG', quality=95)
+                logger.info(
+                    "Upscaled crop %s from %dx%d to %dx%d for OCR",
+                    image_path, img.width, img.height, size[0], size[1],
+                )
+                return buffer.getvalue()
+        except Exception as e:
+            logger.error(f"Error upscaling {image_path}: {str(e)}")
+            return None
+
     @staticmethod
     def encode_uploaded_file_to_base64(uploaded_file: UploadedFile) -> Optional[str]:
         """
