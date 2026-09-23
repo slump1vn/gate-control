@@ -158,6 +158,14 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
 CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 
+# Behind a proxy that terminates TLS, Django sees plain HTTP. Without this it
+# builds http:// URLs for an https:// site, and treats a secure request as
+# insecure. Only turn it on when a proxy really sets X-Forwarded-Proto, since
+# a client could otherwise claim to be on HTTPS.
+if config('USE_X_FORWARDED_PROTO', default=False, cast=bool):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = config('USE_X_FORWARDED_HOST', default=False, cast=bool)
+
 RATE_LIMIT_ENABLE = config('RATE_LIMIT_ENABLE', default=True, cast=bool)
 RATE_LIMIT_RATE = config('RATE_LIMIT_RATE', default='2/min', cast=str)
 RATE_LIMIT_EXCLUDE_PATHS = config('RATE_LIMIT_EXCLUDE_PATHS', default='/health/,/api/v1/health-light/', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])

@@ -276,6 +276,58 @@ docker-compose exec lpr-app cp /app/data/db.sqlite3.backup /app/data/db.sqlite3
 tar -czf container-media-backup-$(date +%Y%m%d).tar.gz container-media/
 ```
 
+## Behind a reverse proxy
+
+Serve the interface and the API on **one origin**. The browser then calls the API
+with relative paths: same-origin, so no CORS, and nothing can be blocked as mixed
+content.
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name lpr.example.edu.vn;
+
+    # ... ssl_certificate, ssl_certificate_key ...
+
+    client_max_body_size 8m;          # uploads; UPLOAD_FILE_MAX_SIZE is 2 MB per file
+
+    location ~ ^/(api|media|health|metrics|admin|static)/ {
+        proxy_pass http://192.168.2.80:8000;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;   # Django needs this to know it is HTTPS
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_read_timeout 120s;          # a gate decision can take seconds
+    }
+
+    location / {
+        proxy_pass http://192.168.2.80:3000;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+The matching `.env` on the application server:
+
+```ini
+ALLOWED_HOSTS=lpr.example.edu.vn,192.168.2.80,localhost,lpr-app
+CORS_ALLOWED_ORIGINS=https://lpr.example.edu.vn
+CSRF_TRUSTED_ORIGINS=https://lpr.example.edu.vn
+BACKEND_API_URL=                  # empty: the browser uses relative paths
+SESSION_COOKIE_SECURE=True        # the site is HTTPS
+USE_X_FORWARDED_PROTO=True        # trust the proxy's X-Forwarded-Proto
+```
+
+Common failures:
+
+| Symptom | Cause |
+|---|---|
+| **"Failed to fetch"** on login, health shows **Service Down** | `BACKEND_API_URL` points somewhere the browser cannot reach, or at `http://` while the page is `https://` (mixed content). Leave it empty |
+| **Bad Request (400)** | The proxy's host name is missing from `ALLOWED_HOSTS` |
+| **CSRF verification failed** | The public origin is missing from `CSRF_TRUSTED_ORIGINS`, or `USE_X_FORWARDED_PROTO` is off so Django compares an `https` Origin against an `http` request |
+| Login appears to work, then every page says logged out | `SESSION_COOKIE_SECURE=True` without HTTPS, or the proxy strips cookies |
+
 ## Troubleshooting
 
 ### Common Issues

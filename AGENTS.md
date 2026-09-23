@@ -97,6 +97,10 @@ Key variables (see `.env.example` and `.env.llamacpp.example` for full list):
 
 - `CSRF_TRUSTED_ORIGINS` — Origins allowed to make session-authenticated unsafe requests (default: same as `CORS_ALLOWED_ORIGINS`). CORS sends credentials for `CORS_ALLOWED_ORIGINS`, so the SPA can log in from another origin of the same site (e.g. a different port)
 - `SESSION_COOKIE_SECURE` — Mark session and CSRF cookies Secure; set `True` behind HTTPS (default: `False`)
+- `USE_X_FORWARDED_PROTO` — Trust `X-Forwarded-Proto` from a TLS-terminating proxy, so Django knows the request is HTTPS and builds `https://` URLs (default: `False`). Only turn it on when a proxy really sets that header
+- `USE_X_FORWARDED_HOST` — Trust `X-Forwarded-Host` (default: `False`)
+
+**Behind a reverse proxy**, serve the SPA and the API on one origin and leave `BACKEND_API_URL` empty: the browser then calls the API with relative paths, which is same-origin, so nothing depends on CORS and nothing can be blocked as mixed content. The proxy must route `/api/`, `/media/`, `/health/`, `/metrics/`, `/admin/` and `/static/` to `lpr-app:8000` and everything else to `spa:3000`. A `BACKEND_API_URL` pointing at an internal address (`http://lpr-app:8000`, or an IP) reaches the SPA container but never the browser, and the SPA then fails every call with "Failed to fetch".
 
 ### Gate automation
 

@@ -237,3 +237,35 @@ class GenerateSecretsCommandTest(TestCase):
         Fernet(lines['GATE_CONFIG_ENCRYPTION_KEY'].encode())
         self.assertGreaterEqual(len(lines['GATE_AGENT_TOKEN']), 32)
         self.assertIn('Back up', err.getvalue())
+
+
+@override_settings(ALLOWED_HOSTS=['lpr.vietinbank.edu.vn'])
+class ReverseProxyTest(TestCase):
+    """Behind a TLS-terminating proxy Django sees plain HTTP."""
+
+    def test_without_the_setting_an_https_request_looks_insecure(self):
+        response = self.client.get('/api/v1/auth/me/', HTTP_HOST='lpr.vietinbank.edu.vn',
+                                   HTTP_X_FORWARDED_PROTO='https')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.wsgi_request.is_secure())
+
+    @override_settings(SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https'))
+    def test_the_proxy_header_makes_the_request_secure(self):
+        response = self.client.get('/api/v1/auth/me/', HTTP_HOST='lpr.vietinbank.edu.vn',
+                                   HTTP_X_FORWARDED_PROTO='https')
+        self.assertTrue(response.wsgi_request.is_secure())
+        # Absolute URLs built for the agent then use https, matching the site
+        self.assertTrue(response.wsgi_request.build_absolute_uri('/x').startswith('https://'))
+
+    @override_settings(SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https'),
+                       CSRF_TRUSTED_ORIGINS=['https://lpr.vietinbank.edu.vn'])
+    def test_login_through_the_proxy(self):
+        User.objects.create_user('guard', password='pw-through-proxy')
+        response = self.client.post(
+            '/api/v1/auth/login/', {'username': 'guard', 'password': 'pw-through-proxy'},
+            content_type='application/json',
+            HTTP_HOST='lpr.vietinbank.edu.vn', HTTP_X_FORWARDED_PROTO='https',
+            HTTP_ORIGIN='https://lpr.vietinbank.edu.vn',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()['authenticated'])

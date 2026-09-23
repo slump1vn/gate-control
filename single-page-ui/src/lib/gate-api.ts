@@ -43,13 +43,26 @@ async function request<T>(path: string, init: RequestInit & { json?: unknown } =
   if (UNSAFE.has(method) && _csrfToken) headers.set('X-CSRFToken', _csrfToken);
 
   const base = await getApiBase();
-  const res = await fetch(`${base}${path}`, {
-    ...rest,
-    method,
-    headers,
-    credentials: 'include',
-    body: json !== undefined ? JSON.stringify(json) : rest.body,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, {
+      ...rest,
+      method,
+      headers,
+      credentials: 'include',
+      body: json !== undefined ? JSON.stringify(json) : rest.body,
+    });
+  } catch {
+    // The browser refused or could not make the request at all: the API address
+    // is unreachable, blocked as mixed content, or blocked by CORS. "Failed to
+    // fetch" on its own tells nobody where to look.
+    const target = base || (typeof window !== 'undefined' ? window.location.origin : '');
+    throw new ApiError(
+      `Cannot reach the API at ${target}${path}. Check that the address is right, is reachable `
+      + 'from this browser, and uses the same scheme (http/https) as this page.',
+      0, 'NETWORK',
+    );
+  }
 
   const data = await res.json().catch(() => null);
   if (!res.ok) {
