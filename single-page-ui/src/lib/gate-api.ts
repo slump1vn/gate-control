@@ -280,6 +280,18 @@ export interface SimulatorState {
 
 export type Direction = 'in' | 'out';
 
+/** What the agent's trigger last measured on a camera. */
+export interface TriggerReadout {
+  state?: 'idle' | 'motion' | 'occupied';
+  fps?: number;
+  motion?: number;
+  presence?: number;
+  motion_threshold?: number;
+  presence_threshold?: number;
+  grab_seconds?: number;
+  at?: string;
+}
+
 export interface GateCamera {
   id: number;
   name: string;
@@ -287,6 +299,7 @@ export interface GateCamera {
   is_enabled: boolean;
   roi: Roi | null;
   agent_status: string | null;
+  agent_trigger: TriggerReadout | null;
 }
 
 export interface GateDevice {
@@ -370,6 +383,7 @@ export interface Camera {
   last_test_error: string;
   agent_status: string | null;
   agent_status_at: string | null;
+  agent_trigger: TriggerReadout | null;
   gates: { id: number; name: string }[];
 }
 

@@ -112,11 +112,22 @@ export const mockEventManual: AccessEvent = {
   has_processed_image: false,
 };
 
+export const mockTriggerIdle = {
+  state: 'idle' as const, fps: 5.1, motion: 0.003, presence: 0.008,
+  motion_threshold: 0.02, presence_threshold: 0.06,
+};
+
+export const mockTriggerOccupied = {
+  state: 'occupied' as const, fps: 4.9, motion: 0.004, presence: 0.184,
+  motion_threshold: 0.02, presence_threshold: 0.06,
+};
+
 export const mockGateCameras = [
   { id: 1, name: 'Camera vào', direction: 'in' as const, is_enabled: true,
-    roi: { x: 0.25, y: 0.45, w: 0.5, h: 0.4 }, agent_status: 'streaming' },
+    roi: { x: 0.25, y: 0.45, w: 0.5, h: 0.4 }, agent_status: 'streaming',
+    agent_trigger: mockTriggerOccupied },
   { id: 2, name: 'Camera ra', direction: 'out' as const, is_enabled: true,
-    roi: null, agent_status: 'streaming' },
+    roi: null, agent_status: 'streaming', agent_trigger: mockTriggerIdle },
 ];
 
 export const mockGateDevice: GateDevice = {
@@ -166,7 +177,8 @@ export const mockGateStatusEsp32Offline: GateStatus = {
   firmware_version: '1.0.0',
   arm_state: 'down',
   simulator: null,
-  cameras: [{ id: 3, name: 'Camera cổng sau', direction: 'in', is_enabled: true, roi: null, agent_status: 'auth_failed' }],
+  cameras: [{ id: 3, name: 'Camera cổng sau', direction: 'in', is_enabled: true, roi: null,
+              agent_status: 'auth_failed', agent_trigger: null }],
   camera_warning: '1 of 2 cameras assigned. A gate needs one watching vehicles arriving and one watching them leave.',
   exit_policy: 'any',
   last_event: mockEventNearMiss,
@@ -212,6 +224,7 @@ export const mockCamera: Camera = {
   last_test_error: '',
   agent_status: 'streaming',
   agent_status_at: '2026-09-22T01:14:50Z',
+  agent_trigger: mockTriggerOccupied,
   gates: [{ id: 1, name: 'Cổng chính' }],
 };
 

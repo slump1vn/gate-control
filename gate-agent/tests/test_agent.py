@@ -221,8 +221,14 @@ class FakeWorker:
     def __init__(self, gate, camera, config, settings, api, controller):
         self.gate, self.camera, self.controller = gate, camera, controller
         self.camera_status = 'streaming'
+        self.readout = {'id': camera['id'], 'status': 'streaming', 'trigger_state': 'idle',
+                        'fps': 5.0, 'motion': 0.0, 'presence': 0.0,
+                        'motion_threshold': 0.02, 'presence_threshold': 0.06}
         self.started = self.stopped = False
         FakeWorker.instances.append(self)
+
+    def status_readout(self):
+        return self.readout
 
     def start(self):
         self.started = True
@@ -320,7 +326,11 @@ class AgentTest(unittest.TestCase):
         self.api.agent_status.assert_not_called()
         self.agent.apply_config(config(gate_config(1)))
         self.agent.report_status()
-        self.api.agent_status.assert_called_once_with([{'id': 11, 'status': 'streaming'}])
+        reported = self.api.agent_status.call_args.args[0]
+        self.assertEqual(reported[0]['id'], 11)
+        self.assertEqual(reported[0]['status'], 'streaming')
+        # The scores the trigger is seeing travel with the status
+        self.assertIn('presence_threshold', reported[0])
 
     def test_status_reports_every_camera(self):
         self.agent.apply_config(config(gate_config(1, cameras=[camera_config(11, 'in'), camera_config(12, 'out')])))
@@ -555,3 +565,19 @@ class MovingVehicleTest(unittest.TestCase):
         fired, _ = self.feed(t, [frame()] * 3 + [frame(car=True)] * 8)
         self.assertTrue(fired)
         self.assertFalse(t.fired_while_moving)
+
+
+class StatusReadoutTest(unittest.TestCase):
+    def test_a_worker_reports_what_its_trigger_sees(self):
+        gate = gate_config()
+        worker = GateWorker(
+            gate, gate['cameras'][0], config(), settings(), mock.Mock(), None,
+            source_factory=lambda camera: FakeSource([frame()] * 3),
+            clock=Clock(), sleep=lambda s: None,
+        )
+        worker.run()
+        readout = worker.status_readout()
+        self.assertEqual(readout['id'], gate['cameras'][0]['id'])
+        self.assertIn(readout['trigger_state'], ('idle', 'motion', 'occupied'))
+        self.assertLessEqual(readout['motion'], 1.0)
+        self.assertEqual(readout['presence_threshold'], worker.trigger.presence_threshold)

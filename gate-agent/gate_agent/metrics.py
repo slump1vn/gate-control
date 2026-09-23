@@ -6,6 +6,11 @@ FRAMES = Counter('lpr_gate_agent_frames_total', 'Camera frames grabbed', ['gate'
 TRIGGERS = Counter('lpr_gate_agent_triggers_total', 'Recognition bursts triggered', ['gate'])
 # Measured, not configured: a slow camera or a slow network lowers it
 FPS = Gauge('lpr_gate_agent_fps', 'Frames per second actually grabbed', ['gate'])
+# What the trigger is seeing right now, against its thresholds. When a vehicle
+# arrives and nothing happens, these say whether it was even noticed.
+MOTION = Gauge('lpr_gate_agent_motion', 'Last motion score (0-1)', ['gate'])
+PRESENCE = Gauge('lpr_gate_agent_presence', 'Last presence score (0-1)', ['gate'])
+PRESENCE_THRESHOLD = Gauge('lpr_gate_agent_presence_threshold', 'Presence score needed', ['gate'])
 GRAB_SECONDS = Histogram(
     'lpr_gate_agent_grab_seconds', 'Time to grab one frame from the camera',
     ['gate'], buckets=[0.05, 0.1, 0.2, 0.3, 0.5, 1, 2, float('inf')],

@@ -11,6 +11,7 @@ import { usePolling } from '@/hooks/usePolling';
 import RequireRole from '@/components/RequireRole';
 import CameraForm from '@/components/CameraForm';
 import CameraStatusBadge from '@/components/CameraStatusBadge';
+import TriggerReadout from '@/components/TriggerReadout';
 import ConfigChangeList from '@/components/ConfigChangeList';
 import Spinner from '@/components/Spinner';
 import { Alert, PageHeader, cardClass, formatDateTime } from '@/components/ui';
@@ -23,7 +24,7 @@ function CameraEditContent() {
 
   const [presets, setPresets] = useState<CameraPresets | null>(null);
   const [camera, setCamera] = useState<Camera | null>(null);
-  const [status, setStatus] = useState<Pick<Camera, 'agent_status' | 'agent_status_at' | 'last_test_at' | 'last_test_ok' | 'last_test_error'> | null>(null);
+  const [status, setStatus] = useState<Pick<Camera, 'agent_status' | 'agent_status_at' | 'agent_trigger' | 'last_test_at' | 'last_test_ok' | 'last_test_error'> | null>(null);
   const [history, setHistory] = useState<ConfigChange[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -99,6 +100,7 @@ function CameraEditContent() {
             <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Agent</div>
             <CameraStatusBadge status={status.agent_status} />
             {status.agent_status_at && <span className="ml-2 text-gray-500 dark:text-gray-400">{formatDateTime(status.agent_status_at)}</span>}
+            <div className="mt-2"><TriggerReadout readout={status.agent_trigger} /></div>
           </div>
           <div>
             <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Last saved test</div>

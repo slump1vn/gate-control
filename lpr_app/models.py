@@ -362,6 +362,12 @@ class Camera(models.Model):
     last_test_ok = models.BooleanField(null=True, blank=True, editable=False)
     last_test_error = models.TextField(blank=True, editable=False)
     agent_status = models.CharField(max_length=20, blank=True, editable=False)
+    agent_trigger = models.JSONField(
+        default=dict, blank=True, editable=False,
+        help_text='What the agent last measured on this camera: frame rate, and the motion and '
+                  'presence scores against their thresholds. Shows why a vehicle did or did not '
+                  'start a recognition burst.',
+    )
     agent_status_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:

@@ -179,5 +179,9 @@ class _NoCameraWorker:
     def start(self):
         pass
 
+    def status_readout(self):
+        return {'id': self.camera['id'], 'status': self.camera_status,
+                'trigger_state': 'idle', 'fps': 2.5}
+
     def stop(self):
         pass

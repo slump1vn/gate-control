@@ -55,6 +55,7 @@ class GateWorker(threading.Thread):
         self.stop_event = threading.Event()
         self.source = None
         self.camera_status = 'reconnecting'
+        self.fps = 0.0
         self.finished = False
         self.trigger = PresenceTrigger(
             motion_threshold=self.camera.get('motion_threshold', 0.02),
@@ -120,6 +121,7 @@ class GateWorker(threading.Thread):
                 self.recent.append(frame)
                 fps = measured.tick(self.clock())
                 if fps is not None:
+                    self.fps = fps
                     metrics.FPS.labels(gate=self.label).set(fps)
             except EndOfSource:
                 logger.info('Gate %s: replay finished', self.label)
@@ -133,7 +135,12 @@ class GateWorker(threading.Thread):
                 logger.warning('Gate %s: camera %s (%s); retrying in %ss', self.label, exc.status, exc, delay)
                 self.stop_event.wait(delay)
                 continue
-            if self.trigger.update(prepare(frame), self.clock()):
+            fired = self.trigger.update(prepare(frame), self.clock())
+            motion, presence = self.trigger.last_scores
+            metrics.MOTION.labels(gate=self.label).set(motion)
+            metrics.PRESENCE.labels(gate=self.label).set(presence)
+            metrics.PRESENCE_THRESHOLD.labels(gate=self.label).set(self.trigger.presence_threshold)
+            if fired:
                 self.handle_trigger(frame)
             # Pace the loop rather than sleeping on top of the grab: a slow
             # camera would otherwise halve the frame rate that was asked for.
@@ -143,6 +150,20 @@ class GateWorker(threading.Thread):
 
     def stop(self):
         self.stop_event.set()
+
+    def status_readout(self):
+        """What this worker is seeing, for the status report and the admin UI."""
+        motion, presence = self.trigger.last_scores
+        return {
+            'id': self.camera['id'],
+            'status': self.camera_status,
+            'trigger_state': self.trigger.state,
+            'fps': round(self.fps, 2),
+            'motion': round(motion, 4),
+            'presence': round(presence, 4),
+            'motion_threshold': round(self.trigger.motion_threshold, 4),
+            'presence_threshold': round(self.trigger.presence_threshold, 4),
+        }
 
     # -- one vehicle ----------------------------------------------------
     def capture_burst(self, first_frame):
@@ -376,10 +397,7 @@ class Agent:
 
     # -- status ---------------------------------------------------------
     def report_status(self):
-        cameras = [
-            {'id': worker.camera['id'], 'status': worker.camera_status}
-            for worker in self.workers.values()
-        ]
+        cameras = [worker.status_readout() for worker in self.workers.values()]
         if not cameras:
             return
         try:

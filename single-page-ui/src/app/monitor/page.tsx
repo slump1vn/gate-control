@@ -8,6 +8,7 @@ import type { AccessEvent, GateStatusResponse } from '@/lib/gate-api';
 import { usePolling } from '@/hooks/usePolling';
 import RequireRole from '@/components/RequireRole';
 import LiveCameraView from '@/components/LiveCameraView';
+import TriggerReadout from '@/components/TriggerReadout';
 import BarrierArm from '@/components/BarrierArm';
 import CameraStatusBadge from '@/components/CameraStatusBadge';
 import { ConfidenceText, DecisionBadge, reasonLabel } from '@/components/EventBadges';
@@ -109,6 +110,7 @@ function MonitorContent() {
                         roi={cam.roi}
                         showRoi={showRoi}
                       />
+                      <div className="mt-1"><TriggerReadout readout={cam.agent_trigger} /></div>
                     </div>
                   ))}
                 </div>

@@ -74,6 +74,30 @@ arriving, rather than frames captured afterwards when it may already have moved 
 If plates are still missed, in order: shrink the read zone to where the plate
 actually is, lower `settle_ms` on the camera, then lower `AGENT_FRAME_INTERVAL`.
 
+## A vehicle arrived and no event appeared
+
+That is a different fault: the vehicle was never noticed, so nothing was even
+sent for recognition. Open **Monitor**; under each live view the agent reports
+what its trigger sees:
+
+```
+Vehicle in the zone · 5.0 frames/s
+Motion    ▓▓▓░░░░  0.004 / 0.020
+Presence  ▓▓▓▓▓▓▓  0.184 / 0.060
+```
+
+- **Presence stays below its threshold while a vehicle is there** — the vehicle
+  fills too little of the read zone. Shrink the zone to the part of the lane the
+  vehicle occupies, or lower `motion_threshold` on the camera (presence is
+  `motion_threshold × AGENT_PRESENCE_FACTOR`, at least 0.04).
+- **It says "Lane empty" with a vehicle in front of the camera** — the agent is
+  reading a different camera or a stale frame. Check the live view actually moves.
+- **Nothing is reported at all** — the agent is not running, or not watching this
+  camera: `docker compose logs gate-agent`.
+- **The state sticks at "Vehicle in the zone"** — the lane never cleared, so the
+  next vehicle is treated as the same one. A camera aimed at a parked car does
+  this; the agent accepts it as background after `AGENT_MAX_OCCUPIED_SECONDS`.
+
 ## Testing recognition before the ESP32 exists
 
 Everything below uses the **simulated barrier**. It speaks exactly the protocol the ESP32 will (token, nonce, timestamp window, UP/DOWN interlock, rate limit), so nothing changes later except the gate's controller type and URL.

@@ -241,3 +241,45 @@ class VendorPresetTest(TestCase):
         camera_service.apply_preset(camera)
         self.assertEqual(camera.snapshot_path, '/ISAPI/Streaming/channels/101/picture')
         self.assertEqual(camera.live_snapshot_path, '/ISAPI/Streaming/channels/102/picture')
+
+
+@override_settings(GATE_CONFIG_ENCRYPTION_KEY=KEY, GATE_AGENT_TOKEN='agent-token')
+class AgentTriggerReadoutTest(TestCase):
+    """The agent reports what its trigger sees, so 'nothing happened' is visible."""
+
+    AGENT = {'HTTP_AUTHORIZATION': 'Bearer agent-token'}
+
+    def setUp(self):
+        self.camera = Camera.objects.create(name='Lane', host='10.0.0.5', snapshot_path='/snap.jpg')
+        operator = User.objects.create_user('guard3', password='pw')
+        operator.groups.add(Group.objects.get(name='gate_admin'))
+        operator.groups.add(Group.objects.get(name='gate_operator'))
+        self.operator = operator
+
+    def report(self, **extra):
+        body = {'cameras': [dict({'id': self.camera.pk, 'status': 'streaming'}, **extra)]}
+        return self.client.post('/api/v1/gate/agent-status/', body,
+                                content_type='application/json', **self.AGENT)
+
+    def test_scores_are_stored_and_served(self):
+        response = self.report(trigger_state='occupied', fps=5.02, motion=0.0041,
+                               presence=0.1837, motion_threshold=0.02, presence_threshold=0.06)
+        self.assertEqual(response.status_code, 200)
+
+        self.client.force_login(self.operator)
+        data = self.client.get(f'/api/v1/gate/cameras/{self.camera.pk}/').json()
+        self.assertEqual(data['agent_trigger']['state'], 'occupied')
+        self.assertEqual(data['agent_trigger']['presence'], 0.1837)
+        self.assertEqual(data['agent_trigger']['fps'], 5.02)
+        self.assertIn('at', data['agent_trigger'])
+
+    def test_junk_is_dropped(self):
+        self.report(trigger_state='sideways', motion='lots', presence=None, fps=True)
+        self.camera.refresh_from_db()
+        self.assertEqual(self.camera.agent_trigger, {})
+
+    def test_a_status_without_scores_still_works(self):
+        self.assertEqual(self.report().status_code, 200)
+        self.camera.refresh_from_db()
+        self.assertEqual(self.camera.agent_status, 'streaming')
+        self.assertEqual(self.camera.agent_trigger, {})

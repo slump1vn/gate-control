@@ -64,6 +64,7 @@ def serialize_camera(c):
         'last_test_error': c.last_test_error,
         'agent_status': c.agent_status or None,
         'agent_status_at': iso(c.agent_status_at),
+        'agent_trigger': c.agent_trigger or None,
         'gates': [{'id': g.id, 'name': g.name} for g in c.gates.all()],
     }
 
@@ -77,6 +78,7 @@ def gate_camera(link):
         'is_enabled': camera.is_enabled,
         'roi': camera.roi,
         'agent_status': camera.agent_status or None,
+        'agent_trigger': camera.agent_trigger or None,
     }
 
 

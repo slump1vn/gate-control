@@ -122,6 +122,26 @@ def api_gate_agent_commands(request):
     return JsonResponse({'commands': commands})
 
 
+# Numbers only, and only the ones the UI shows: the agent is trusted to
+# report, not to decide what gets stored.
+TRIGGER_NUMBERS = ('fps', 'motion', 'presence', 'motion_threshold', 'presence_threshold', 'grab_seconds')
+TRIGGER_STATES = {'idle', 'motion', 'occupied'}
+
+
+def _trigger_readout(item):
+    readout = {}
+    for key in TRIGGER_NUMBERS:
+        value = item.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            readout[key] = round(float(value), 4)
+    state = item.get('trigger_state')
+    if state in TRIGGER_STATES:
+        readout['state'] = state
+    if readout:
+        readout['at'] = timezone.now().isoformat()
+    return readout
+
+
 def _agent_camera(camera, direction=''):
     if camera is None or not camera.is_enabled:
         return None
@@ -225,7 +245,9 @@ def api_gate_agent_status(request):
         status = str(item.get('status', ''))
         if status not in AGENT_CAMERA_STATUSES:
             return error(f'Unknown camera status {status!r}', 'INVALID_STATUS')
-        updated += Camera.objects.filter(pk=item.get('id')).update(agent_status=status, agent_status_at=now)
+        updated += Camera.objects.filter(pk=item.get('id')).update(
+            agent_status=status, agent_status_at=now, agent_trigger=_trigger_readout(item),
+        )
     return JsonResponse({'success': True, 'updated': updated})
 
 

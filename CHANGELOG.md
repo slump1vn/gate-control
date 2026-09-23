@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- The agent reports what its trigger sees (state, frame rate, motion and presence against their thresholds), shown under each live view on `/monitor` and on the camera page, and exported as `lpr_gate_agent_motion` / `lpr_gate_agent_presence`. When a vehicle arrives and no event appears, this says whether it was noticed at all
 - A gate is watched by several cameras, each assigned a direction (`GateCamera`): normally one for vehicles arriving and one for those leaving, with a warning while fewer are assigned. Access events record which camera read the vehicle and which way it was going, and the event log can be filtered by direction
 - `GateDevice.exit_policy`: a camera watching the exit either applies the registry (default) or opens for every vehicle while still logging its plate
 - Gate automation (openspec change `2026-09-22-anpr-gate-automation`): vehicle registry with Vietnamese plate normalisation, consensus-based access decisions (`/api/v1/gate/decide/`), cameras managed from the admin with encrypted credentials and a connection test, access event log with retention, manual overrides through an agent command queue, gate metrics (`lpr_gate_*`)
