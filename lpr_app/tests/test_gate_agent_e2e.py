@@ -17,7 +17,7 @@ from cryptography.fernet import Fernet
 from django.test import LiveServerTestCase, override_settings
 from PIL import Image, ImageDraw
 
-from lpr_app.models import AccessEvent, Camera, GateDevice, SimulatedBarrier, Vehicle
+from lpr_app.models import GateCamera, AccessEvent, Camera, GateDevice, SimulatedBarrier, Vehicle
 from lpr_app.services import config_audit, gate_service
 
 AGENT_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'gate-agent')
@@ -77,8 +77,9 @@ class AgentAgainstLiveServerTest(LiveServerTestCase):
 
         Vehicle.objects.create(plate_display='30A-123.45', owner_name='Nguyen Van A')
         camera = Camera.objects.create(name='Gate cam', host='192.168.1.64', snapshot_path='/snap.jpg')
-        self.gate = GateDevice(name='Main gate', controller_type='simulator', camera=camera)
+        self.gate = GateDevice(name='Main gate', controller_type='simulator')
         config_audit.save_gate_device(self.gate, None)
+        GateCamera.objects.create(gate=self.gate, camera=camera, direction='in')
         SimulatedBarrier.objects.filter(gate=self.gate).update(travel_seconds=1.0, auto_close_seconds=0)
 
         env = mock.patch.dict(os.environ, {'GATE_AGENT_TOKEN': TOKEN, 'LPR_API_URL': self.live_server_url})
@@ -171,8 +172,8 @@ class _InlineExecutor:
 class _NoCameraWorker:
     """Stands in for a camera worker so the test only exercises commands and status."""
 
-    def __init__(self, gate, config, settings, api, controller):
-        self.camera = gate['camera']
+    def __init__(self, gate, camera, config, settings, api, controller):
+        self.camera = camera
         self.camera_status = 'streaming'
 
     def start(self):

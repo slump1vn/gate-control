@@ -17,7 +17,7 @@ const REFRESH_MS = 5000;
 
 type Filters = Omit<AccessEventFilters, 'page' | 'page_size'>;
 
-const EMPTY_FILTERS: Filters = { gate: '', decision: '', reason: '', plate: '', date_from: '', date_to: '', is_test: 'false' };
+const EMPTY_FILTERS: Filters = { gate: '', direction: '', decision: '', reason: '', plate: '', date_from: '', date_to: '', is_test: 'false' };
 
 function EventsContent() {
   const [apiBase, setApiBase] = useState('');
@@ -89,10 +89,15 @@ function EventsContent() {
         <Checkbox id="events-auto-refresh" label="Auto-refresh" checked={autoRefresh} onChange={setAutoRefresh} />
       </PageHeader>
 
-      <form onSubmit={apply} className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-4 items-end">
+      <form onSubmit={apply} className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-9 gap-2 mb-4 items-end">
         <select aria-label="Gate" className={inputClass} value={draft.gate} onChange={(e) => set('gate', e.target.value)}>
           <option value="">All gates</option>
           {gates.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+        <select aria-label="Direction" className={inputClass} value={draft.direction} onChange={(e) => set('direction', e.target.value)}>
+          <option value="">In and out</option>
+          <option value="in">Entering</option>
+          <option value="out">Leaving</option>
         </select>
         <select aria-label="Decision" className={inputClass} value={draft.decision} onChange={(e) => set('decision', e.target.value)}>
           <option value="">All decisions</option>

@@ -67,8 +67,11 @@ def api_gate_decide(request):
         gate_id = int(request.POST.get('gate_id', ''))
     except ValueError:
         return error('gate_id is required', 'MISSING_GATE')
+    # Which of the gate's cameras saw the vehicle, and so which way it was going
+    camera_id = request.POST.get('camera_id') or ''
+    camera_id = int(camera_id) if camera_id.isdigit() else None
 
-    decision = gate_service.decide(gate_id, frames, started=started)
+    decision = gate_service.decide(gate_id, frames, started=started, camera_id=camera_id)
     event = decision.event
     return JsonResponse({
         'success': True,
@@ -82,6 +85,7 @@ def api_gate_decide(request):
         'vehicle': vehicle_ref(event.vehicle),
         'near_miss_vehicle': vehicle_ref(event.near_miss_vehicle),
         'event_id': event.id,
+        'direction': event.direction or None,
         'mode': event.mode,
         'actuate': decision.actuate,
         'command': 'open' if decision.actuate else None,
@@ -118,7 +122,7 @@ def api_gate_agent_commands(request):
     return JsonResponse({'commands': commands})
 
 
-def _agent_camera(camera):
+def _agent_camera(camera, direction=''):
     if camera is None or not camera.is_enabled:
         return None
     try:
@@ -130,6 +134,7 @@ def _agent_camera(camera):
     return {
         'id': camera.id,
         'name': camera.name,
+        'direction': direction,
         'host': camera.host,
         'rtsp_port': camera.rtsp_port,
         'http_port': camera.http_port,
@@ -171,8 +176,8 @@ def _agent_gate(request, gate):
     return {
         'id': gate.id,
         'name': gate.name,
-        'direction': gate.direction,
         'has_safety_input': gate.has_safety_input,
+        'exit_policy': gate.exit_policy,
         'controller_type': gate.controller_type,
         'controller_url': controller_url,
         'controller_token': token,
@@ -180,14 +185,14 @@ def _agent_gate(request, gate):
         'auto_close': auto_close,
         'auto_close_seconds': settings.GATE_AUTO_CLOSE_SECONDS,
         'config_errors': config_errors,
-        'camera': _agent_camera(gate.camera),
+        'cameras': [c for c in (_agent_camera(link.camera, link.direction) for link in gate.gate_cameras.all()) if c],
     }
 
 
 @require_http_methods(["GET"])
 @require_agent_token
 def api_gate_agent_config(request):
-    gates = GateDevice.objects.filter(is_enabled=True).select_related('camera').order_by('id')
+    gates = GateDevice.objects.filter(is_enabled=True).prefetch_related('gate_cameras__camera').order_by('id')
     payload = {
         'mode': gate_service.effective_mode(),
         'burst_frames': settings.GATE_BURST_FRAMES,
@@ -283,15 +288,12 @@ def api_gate_override(request):
 @require_gate_operator
 def api_gate_status(request):
     gates = []
-    for gate in GateDevice.objects.select_related('camera').order_by('id'):
+    for gate in GateDevice.objects.prefetch_related('gate_cameras__camera').order_by('id'):
         simulator = barrier_simulator.refresh(gate) if gate.is_simulated else None
         last = gate.events.select_related('vehicle', 'near_miss_vehicle', 'operator', 'uploaded_image').first()
         data = serialize_gate(gate)
         data['simulator'] = simulator
-        data['camera_status'] = (gate.camera.agent_status or None) if gate.camera else None
-        # Enough for the live view to draw the read zone over the frame
-        data['camera_roi'] = gate.camera.roi if gate.camera else None
-        data['camera_enabled'] = gate.camera.is_enabled if gate.camera else None
+        # serialize_gate already carries the cameras, their directions and read zones
         data['last_event'] = serialize_event(last) if last else None
         gates.append(data)
     return JsonResponse({'mode': gate_service.effective_mode(), 'gates': gates})

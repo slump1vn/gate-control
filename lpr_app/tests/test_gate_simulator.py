@@ -443,9 +443,11 @@ class AdminTestPageTest(TestCase):
         change = f'/admin/lpr_app/gatedevice/{self.sim.id}/change/'
         sim = SimulatedBarrier.objects.get(gate=self.sim)
         response = self.client.post(change, {
-            'name': 'Sim gate', 'location': '', 'direction': 'in', 'camera': '',
-            'controller_type': 'simulator', 'controller_url': '', 'controller_token': '',
+            'name': 'Sim gate', 'location': '',
+            'controller_type': 'simulator', 'controller_url': '', 'controller_token': '', 'exit_policy': 'registered',
             'is_enabled': 'on',
+            'gate_cameras-TOTAL_FORMS': '0', 'gate_cameras-INITIAL_FORMS': '0',
+            'gate_cameras-MIN_NUM_FORMS': '0', 'gate_cameras-MAX_NUM_FORMS': '1000',
             'simulator-TOTAL_FORMS': '1', 'simulator-INITIAL_FORMS': '1',
             'simulator-MIN_NUM_FORMS': '0', 'simulator-MAX_NUM_FORMS': '1',
             'simulator-0-id': sim.id, 'simulator-0-gate': self.sim.id,
@@ -457,9 +459,11 @@ class AdminTestPageTest(TestCase):
 
     def test_new_simulated_gate_via_admin_with_inline(self):
         response = self.client.post('/admin/lpr_app/gatedevice/add/', {
-            'name': 'New sim', 'location': '', 'direction': 'in', 'camera': '',
-            'controller_type': 'simulator', 'controller_url': '', 'controller_token': '',
+            'name': 'New sim', 'location': '',
+            'controller_type': 'simulator', 'controller_url': '', 'controller_token': '', 'exit_policy': 'registered',
             'is_enabled': 'on',
+            'gate_cameras-TOTAL_FORMS': '0', 'gate_cameras-INITIAL_FORMS': '0',
+            'gate_cameras-MIN_NUM_FORMS': '0', 'gate_cameras-MAX_NUM_FORMS': '1000',
             'simulator-TOTAL_FORMS': '1', 'simulator-INITIAL_FORMS': '0',
             'simulator-MIN_NUM_FORMS': '0', 'simulator-MAX_NUM_FORMS': '1',
             'simulator-0-travel_seconds': '4', 'simulator-0-auto_close_seconds': '20',

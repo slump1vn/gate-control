@@ -37,6 +37,8 @@ export const mockEventGranted: AccessEvent = {
   id: 101,
   timestamp: '2026-09-22T01:15:00Z',
   gate: { id: 1, name: 'Cổng chính' },
+  camera: { id: 1, name: 'Camera vào' },
+  direction: 'in',
   plate_raw: '30A-123.45',
   plate_normalized: '30A12345',
   confidence: 0.96,
@@ -110,12 +112,20 @@ export const mockEventManual: AccessEvent = {
   has_processed_image: false,
 };
 
+export const mockGateCameras = [
+  { id: 1, name: 'Camera vào', direction: 'in' as const, is_enabled: true,
+    roi: { x: 0.25, y: 0.45, w: 0.5, h: 0.4 }, agent_status: 'streaming' },
+  { id: 2, name: 'Camera ra', direction: 'out' as const, is_enabled: true,
+    roi: null, agent_status: 'streaming' },
+];
+
 export const mockGateDevice: GateDevice = {
   id: 1,
   name: 'Cổng chính',
-  location: 'Cổng trước, làn vào',
-  direction: 'in',
-  camera: { id: 1, name: 'Camera cổng chính' },
+  location: 'Cổng trước',
+  cameras: mockGateCameras,
+  camera_warning: '',
+  exit_policy: 'registered',
   controller_type: 'simulator',
   controller_url: '',
   controller_token_set: true,
@@ -142,9 +152,6 @@ export const mockGateStatusSimulated: GateStatus = {
     firmware_version: 'simulator-1',
   },
   arm_state: 'moving',
-  camera_status: 'streaming',
-  camera_roi: { x: 0.25, y: 0.45, w: 0.5, h: 0.4 },
-  camera_enabled: true,
   last_event: mockEventGranted,
 };
 
@@ -152,7 +159,6 @@ export const mockGateStatusEsp32Offline: GateStatus = {
   ...mockGateDevice,
   id: 2,
   name: 'Cổng sau',
-  direction: 'out',
   controller_type: 'esp32',
   controller_url: 'http://192.168.1.50/',
   online: false,
@@ -160,10 +166,9 @@ export const mockGateStatusEsp32Offline: GateStatus = {
   firmware_version: '1.0.0',
   arm_state: 'down',
   simulator: null,
-  camera: { id: 2, name: 'Camera cổng sau' },
-  camera_status: 'auth_failed',
-  camera_roi: null,
-  camera_enabled: true,
+  cameras: [{ id: 3, name: 'Camera cổng sau', direction: 'in', is_enabled: true, roi: null, agent_status: 'auth_failed' }],
+  camera_warning: '1 of 2 cameras assigned. A gate needs one watching vehicles arriving and one watching them leave.',
+  exit_policy: 'any',
   last_event: mockEventNearMiss,
 };
 

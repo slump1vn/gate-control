@@ -48,6 +48,21 @@ def _load_config(api):
         sys.exit(f'Cannot reach the LPR service: {exc.__class__.__name__}: {exc}')
 
 
+def _camera(gate, camera_id=None):
+    """The gate's camera to work with: the one asked for, or its entry camera."""
+    cameras = gate.get('cameras') or []
+    if camera_id is not None:
+        for camera in cameras:
+            if camera['id'] == camera_id:
+                return camera
+        sys.exit(f'Gate {gate["id"]} has no enabled camera {camera_id} '
+                 f'(enabled: {[(c["id"], c.get("direction")) for c in cameras]})')
+    for camera in cameras:
+        if camera.get('direction') == 'in':
+            return camera
+    return cameras[0] if cameras else None
+
+
 def _gate(config, gate_id):
     for gate in config.get('gates', []):
         if gate['id'] == gate_id:
@@ -80,7 +95,8 @@ def cmd_decide(settings, args):
     api = _api(settings)
     config = _load_config(api)
     gate = _gate(config, args.gate)
-    roi = (gate.get('camera') or {}).get('roi') if args.roi else None
+    camera = _camera(gate, args.camera)
+    roi = (camera or {}).get('roi') if args.roi else None
     max_bytes = config.get('max_upload_bytes', 2 * 1024 * 1024)
 
     frames = []
@@ -90,7 +106,8 @@ def cmd_decide(settings, args):
         frames.append(data)
 
     try:
-        result = api.decide(gate['id'], frames, timeout=config.get('decide_timeout_seconds', 8) + 5)
+        result = api.decide(gate['id'], frames, timeout=config.get('decide_timeout_seconds', 8) + 5,
+                            camera_id=camera['id'] if camera else None)
     except ApiError as exc:
         print(f'Decision request failed: {exc}', file=sys.stderr)
         return 2
@@ -123,7 +140,8 @@ def cmd_replay(settings, args):
     api = _api(settings)
     config = _load_config(api)
     gate = _gate(config, args.gate)
-    if not gate.get('camera'):
+    camera = _camera(gate, args.camera)
+    if camera is None:
         sys.exit('The gate has no enabled camera; the replay uses its ROI and trigger settings')
     settings.frame_interval = 1.0 / args.fps
     settings.burst_interval = settings.frame_interval
@@ -138,7 +156,7 @@ def cmd_replay(settings, args):
 
     clock = VirtualClock()
     worker = ReplayWorker(
-        gate, config, settings, api, make_controller(gate),
+        gate, camera, config, settings, api, make_controller(gate),
         source_factory=lambda camera: DirectorySource(args.directory),
         clock=clock, sleep=clock.sleep,
         allow_actuation=_may_actuate(gate, args.allow_real_controller),
@@ -163,12 +181,16 @@ def main(argv=None):
     decide = sub.add_parser('decide', help='Send photos as one burst and print the decision')
     decide.add_argument('--gate', type=int, required=True)
     decide.add_argument('--roi', action='store_true', help="Crop photos to the gate camera's ROI first")
+    decide.add_argument('--camera', type=int, help='Which camera of the gate the photos came from '
+                                                   '(default: the one watching the entry)')
     decide.add_argument('--allow-real-controller', action='store_true')
     decide.add_argument('images', nargs='+')
 
     replay = sub.add_parser('replay', help='Replay a directory of frames through the trigger')
     replay.add_argument('--gate', type=int, required=True)
     replay.add_argument('--fps', type=float, default=2.5)
+    replay.add_argument('--camera', type=int, help='Which camera of the gate the frames came from '
+                                                   '(default: the one watching the entry)')
     replay.add_argument('--allow-real-controller', action='store_true')
     replay.add_argument('directory')
 

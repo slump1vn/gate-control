@@ -23,6 +23,7 @@ from .trigger import PresenceTrigger, prepare
 logger = logging.getLogger('gate_agent')
 
 RECONNECT_BACKOFF = (1, 2, 5, 10, 30)
+DIRECTION_LABELS = {'in': 'entry', 'out': 'exit'}
 
 
 def make_controller(gate):
@@ -33,11 +34,13 @@ def make_controller(gate):
 
 
 class GateWorker(threading.Thread):
-    def __init__(self, gate, config, settings, api, controller, source_factory=build_source,
+    """Watches one camera of one gate. A gate has one worker per camera."""
+
+    def __init__(self, gate, camera, config, settings, api, controller, source_factory=build_source,
                  clock=time.monotonic, sleep=time.sleep, allow_actuation=True):
-        super().__init__(name=f"gate-{gate['id']}", daemon=True)
+        super().__init__(name=f"gate-{gate['id']}-camera-{camera['id']}", daemon=True)
         self.gate = gate
-        self.camera = gate['camera']
+        self.camera = camera
         self.config = config
         self.settings = settings
         self.api = api
@@ -46,7 +49,8 @@ class GateWorker(threading.Thread):
         self.clock = clock
         self.sleep = sleep
         self.allow_actuation = allow_actuation
-        self.label = gate['name']
+        direction = camera.get('direction')
+        self.label = f"{gate['name']} ({DIRECTION_LABELS.get(direction, 'camera ' + str(camera['id']))})"
         self.stop_event = threading.Event()
         self.source = None
         self.camera_status = 'reconnecting'
@@ -140,7 +144,7 @@ class GateWorker(threading.Thread):
             if not frames:
                 return None
             timeout = self.config.get('decide_timeout_seconds', 8) + 5
-            result = self.api.decide(self.gate['id'], frames, timeout=timeout)
+            result = self.api.decide(self.gate['id'], frames, timeout=timeout, camera_id=self.camera['id'])
             metrics.DECISION_ROUNDTRIP.labels(gate=self.label).observe(self.clock() - started)
             metrics.DECISIONS.labels(gate=self.label, decision=result['decision'], reason=result['reason']).inc()
             logger.info(
@@ -211,11 +215,11 @@ def _report(api, event_id, sent, result):
         logger.error('Could not report command result for event %s: %s', event_id, exc)
 
 
-def _gate_signature(gate):
+def _worker_signature(gate, camera):
     """What must stay the same for a running worker to be kept."""
-    camera = gate.get('camera') or {}
     return (
         camera.get('id'), camera.get('config_version'), camera.get('host'), camera.get('password'),
+        camera.get('direction'), camera.get('roi') and tuple(sorted(camera['roi'].items())),
         gate.get('controller_url'), gate.get('controller_token'), gate.get('auto_close'),
     )
 
@@ -249,40 +253,51 @@ class Agent:
     def apply_config(self, config):
         self.config = config
         self.version = config.get('version')
-        logger.info('Config %s: mode=%s, %d gate(s)', self.version, config.get('mode'), len(config.get('gates', [])))
-        seen = set()
-        for gate in config.get('gates', []):
+        gates = config.get('gates', [])
+        cameras = sum(len(gate.get('cameras') or []) for gate in gates)
+        logger.info('Config %s: mode=%s, %d gate(s), %d camera(s)',
+                    self.version, config.get('mode'), len(gates), cameras)
+        seen_gates = set()
+        seen_workers = set()
+        for gate in gates:
             gate_id = gate['id']
-            seen.add(gate_id)
+            seen_gates.add(gate_id)
             for message in gate.get('config_errors', []):
                 logger.warning('Gate %s: %s', gate['name'], message)
             if gate.get('controller_token_error'):
                 logger.error('Gate %s: controller token unavailable (%s)', gate['name'], gate['controller_token_error'])
-            signature = _gate_signature(gate)
             self.gates[gate_id] = gate
-            if self.signatures.get(gate_id) != signature:
-                self.controllers[gate_id] = make_controller(gate)
-                self._restart_worker(gate)
-                self.signatures[gate_id] = signature
+            self.controllers[gate_id] = make_controller(gate)
+            if not gate.get('cameras'):
+                logger.info('Gate %s has no enabled camera; commands only', gate['name'])
+            for camera in gate.get('cameras') or []:
+                key = (gate_id, camera['id'])
+                seen_workers.add(key)
+                signature = _worker_signature(gate, camera)
+                if self.signatures.get(key) != signature:
+                    self._restart_worker(gate, camera)
+                    self.signatures[key] = signature
+        for key in list(self.workers):
+            if key not in seen_workers:
+                self._stop_worker(key)
+                self.signatures.pop(key, None)
         for gate_id in list(self.gates):
-            if gate_id not in seen:
+            if gate_id not in seen_gates:
                 logger.info('Gate %s removed or disabled', self.gates[gate_id]['name'])
-                self._stop_worker(gate_id)
                 self.gates.pop(gate_id)
                 self.controllers.pop(gate_id, None)
-                self.signatures.pop(gate_id, None)
 
-    def _restart_worker(self, gate):
-        self._stop_worker(gate['id'])
-        if not gate.get('camera'):
-            logger.info('Gate %s has no enabled camera; commands only', gate['name'])
-            return
-        worker = self.worker_factory(gate, self.config, self.settings, self.api, self.controllers.get(gate['id']))
-        self.workers[gate['id']] = worker
+    def _restart_worker(self, gate, camera):
+        key = (gate['id'], camera['id'])
+        self._stop_worker(key)
+        worker = self.worker_factory(
+            gate, camera, self.config, self.settings, self.api, self.controllers.get(gate['id']),
+        )
+        self.workers[key] = worker
         worker.start()
 
-    def _stop_worker(self, gate_id):
-        worker = self.workers.pop(gate_id, None)
+    def _stop_worker(self, key):
+        worker = self.workers.pop(key, None)
         if worker is not None:
             worker.stop()
 
@@ -331,5 +346,5 @@ class Agent:
         self.shutdown()
 
     def shutdown(self):
-        for gate_id in list(self.workers):
-            self._stop_worker(gate_id)
+        for key in list(self.workers):
+            self._stop_worker(key)

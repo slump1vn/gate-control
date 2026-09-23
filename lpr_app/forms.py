@@ -67,7 +67,7 @@ class GateDeviceForm(forms.ModelForm):
     class Meta:
         model = GateDevice
         fields = [
-            'name', 'location', 'direction', 'camera', 'controller_type', 'controller_url',
+            'name', 'location', 'controller_type', 'controller_url', 'exit_policy',
             'has_safety_input', 'is_enabled',
         ]
 

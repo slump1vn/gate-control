@@ -27,7 +27,7 @@ from django.db import connection
 from django.utils import timezone
 
 from .. import metrics
-from ..models import AccessEvent, GateDevice, ProcessingLog, UploadedImage
+from ..models import AccessEvent, GateCamera, GateDevice, ProcessingLog, UploadedImage
 from ..utils.plates import normalize_plate
 from . import plate_matcher
 from .image_processing_service import ImageProcessingService
@@ -280,9 +280,15 @@ def evaluate(reads, pending=0, at=None):
 # Entry point
 # ---------------------------------------------------------------------------
 
-def decide(gate_id, uploaded_files, started=None, is_test=False):
+def decide(gate_id, uploaded_files, started=None, is_test=False, camera_id=None):
     """
     Make and record a decision for a burst of frames from one gate.
+
+    camera_id says which of the gate's cameras saw the vehicle, and with it
+    which way the vehicle was going. A gate whose exit_policy is 'any' opens
+    for every vehicle leaving: the plate is still read and logged, so the
+    entry and exit of a visitor can still be matched up afterwards.
+
     is_test marks decisions run from the admin test page; they are logged but
     kept out of the gate metrics.
     """
@@ -299,6 +305,7 @@ def decide(gate_id, uploaded_files, started=None, is_test=False):
             metrics.record_gate_decision(event)
         return Decision(event=event, outcome=Outcome(reason='device_disabled'), actuate=False)
 
+    direction = camera_direction(gate, camera_id)
     images = [create_frame_record(f) for f in uploaded_files]
     deadline = started + settings.GATE_DECIDE_TIMEOUT
     reads, pending = read_frames([img.pk for img in images], deadline)
@@ -310,8 +317,13 @@ def decide(gate_id, uploaded_files, started=None, is_test=False):
         discard_frame(image_id)
 
     match = outcome.match
+    # Leaving a gate that is open to everyone: record what was read, open anyway.
+    exit_free = direction == 'out' and gate.exit_policy == 'any' and not outcome.granted
+    granted = outcome.granted or exit_free
     event = AccessEvent.objects.create(
         gate=gate,
+        camera_id=camera_id if direction else None,
+        direction=direction,
         plate_raw=outcome.plate_raw[:64],
         plate_normalized=outcome.plate[:20],
         confidence=outcome.confidence,
@@ -319,23 +331,31 @@ def decide(gate_id, uploaded_files, started=None, is_test=False):
         frames_agreed=outcome.frames_agreed,
         vehicle=match.vehicle if match else None,
         near_miss_vehicle=match.near_miss if match else None,
-        decision='granted' if outcome.granted else 'denied',
-        reason=outcome.reason,
+        decision='granted' if granted else 'denied',
+        reason='exit_free' if exit_free else outcome.reason,
         mode=mode,
         uploaded_image_id=evidence_id,
-        command='open' if outcome.granted else '',
+        command='open' if granted else '',
         decision_latency_ms=_elapsed_ms(started),
         is_test=is_test,
     )
     if not is_test:
         metrics.record_gate_decision(event)
-    actuate = outcome.granted and can_actuate(gate, mode)
+    actuate = granted and can_actuate(gate, mode)
     logger.info(
         'Gate %s decision: %s (%s) plate=%s conf=%s frames=%d/%d mode=%s latency=%dms',
         gate.name, event.decision, event.reason, event.plate_normalized or '-',
         event.confidence, event.frames_agreed, event.frames_read, mode, event.decision_latency_ms,
     )
     return Decision(event=event, outcome=outcome, actuate=actuate, discarded=discarded)
+
+
+def camera_direction(gate, camera_id):
+    """Which way the camera that took these frames is pointing ('' if unknown)."""
+    if not camera_id:
+        return ''
+    link = GateCamera.objects.filter(gate=gate, camera_id=camera_id).first()
+    return link.direction if link else ''
 
 
 def _elapsed_ms(started):

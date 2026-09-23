@@ -9,6 +9,7 @@ from django.utils.safestring import mark_safe
 from .models import (
     UploadedImage, ProcessingLog,
     Vehicle, Camera, GateDevice, AccessEvent, GateConfigChange, SimulatedBarrier,
+    GateCamera,
 )
 from .forms import CameraForm, GateDeviceForm
 from .services import barrier_simulator, config_audit, gate_service
@@ -281,6 +282,13 @@ class CameraAdmin(admin.ModelAdmin):
         config_audit.delete_with_audit(obj, request.user)
 
 
+class GateCameraInline(admin.TabularInline):
+    model = GateCamera
+    extra = 2
+    verbose_name = 'Camera'
+    verbose_name_plural = 'Cameras watching this gate (one for each direction)'
+
+
 class SimulatedBarrierInline(admin.StackedInline):
     model = SimulatedBarrier
     fields = ('travel_seconds', 'auto_close_seconds')
@@ -292,16 +300,27 @@ class SimulatedBarrierInline(admin.StackedInline):
 @admin.register(GateDevice)
 class GateDeviceAdmin(admin.ModelAdmin):
     form = GateDeviceForm
-    inlines = [SimulatedBarrierInline]
+    inlines = [GateCameraInline, SimulatedBarrierInline]
     list_display = (
-        'name', 'direction', 'camera', 'controller_type', 'is_enabled', 'arm_state',
+        'name', 'camera_summary', 'controller_type', 'exit_policy', 'is_enabled', 'arm_state',
         'last_seen', 'firmware_version', 'test_link',
     )
-    list_filter = ('direction', 'is_enabled', 'controller_type')
+    list_filter = ('is_enabled', 'controller_type', 'exit_policy')
     readonly_fields = (
         'test_link', 'arm_state', 'arm_state_at', 'last_seen', 'firmware_version',
         'last_command_result', 'created_at', 'updated_at',
     )
+
+    @admin.display(description='Cameras')
+    def camera_summary(self, obj):
+        links = list(obj.gate_cameras.select_related('camera'))
+        if not links:
+            return format_html('<span style="color:#c00">none</span>')
+        text = ', '.join(f'{link.camera.name} ({link.get_direction_display().lower()})' for link in links)
+        warning = obj.camera_warning()
+        if warning:
+            return format_html('{} <span style="color:#c60" title="{}">&#9888;</span>', text, warning)
+        return text
 
     @admin.display(description='Test')
     def test_link(self, obj):

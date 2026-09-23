@@ -19,7 +19,7 @@ AUDITED_FIELDS = {
         'roi_x', 'roi_y', 'roi_w', 'roi_h', 'motion_threshold', 'settle_ms', 'cooldown_s',
     ],
     GateDevice: [
-        'name', 'location', 'direction', 'camera_id', 'controller_type', 'controller_url',
+        'name', 'location', 'controller_type', 'controller_url', 'exit_policy',
         'has_safety_input', 'is_enabled',
     ],
 }

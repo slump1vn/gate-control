@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { AccessEvent } from '@/lib/gate-api';
-import { eventImagePath } from '@/lib/gate-api';
+import { DIRECTION_LABELS, eventImagePath } from '@/lib/gate-api';
 import { CommandBadge, ConfidenceText, DecisionBadge, reasonLabel } from './EventBadges';
 import { Badge, formatDateTime } from './ui';
 
@@ -56,9 +56,11 @@ export default function EventTable({ events, apiBase, onOpenAnyway, onPreview }:
               <td className="px-3 py-2"><Thumbnail event={e} apiBase={apiBase} onPreview={onPreview} /></td>
               <td className="px-3 py-2">
                 <div className="whitespace-nowrap">{formatDateTime(e.timestamp)}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">
-                  {e.gate?.name ?? '—'}
-                  {e.is_test && <> · <Badge color="purple">test</Badge></>}
+                <div className="text-xs text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-1">
+                  <span>{e.gate?.name ?? '—'}</span>
+                  {e.direction && <Badge color={e.direction === 'in' ? 'blue' : 'purple'}>{DIRECTION_LABELS[e.direction]}</Badge>}
+                  {e.camera && <span className="truncate max-w-[8rem]">{e.camera.name}</span>}
+                  {e.is_test && <Badge color="purple">test</Badge>}
                 </div>
               </td>
               <td className="px-3 py-2">

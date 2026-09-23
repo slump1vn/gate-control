@@ -16,5 +16,10 @@ type Story = StoryObj<typeof GateStatusCard>;
 
 export const SimulatedOpening: Story = { args: { gate: mockGateStatusSimulated } };
 export const Esp32OfflineShadow: Story = { args: { gate: mockGateStatusEsp32Offline } };
-export const Esp32Live: Story = { args: { gate: { ...mockGateStatusEsp32Offline, online: true, camera_status: 'streaming' }, mode: 'live' } };
+export const Esp32Live: Story = { args: { gate: { ...mockGateStatusEsp32Offline, online: true }, mode: 'live' } };
 export const NoDecisionYet: Story = { args: { gate: { ...mockGateStatusSimulated, last_event: null, simulator: null, arm_state: 'down' } } };
+
+/** A gate that still only sees one direction. */
+export const MissingExitCamera: Story = {
+  args: { gate: { ...mockGateStatusSimulated, cameras: [mockGateStatusSimulated.cameras[0]], camera_warning: '1 of 2 cameras assigned. A gate needs one watching vehicles arriving and one watching them leave.' } },
+};

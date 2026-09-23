@@ -7,7 +7,7 @@ from unittest.mock import patch
 from django.contrib.auth.models import Group, User
 from django.test import TestCase, override_settings
 
-from ..models import Camera, GateDevice
+from ..models import Camera, GateCamera, GateDevice
 from ..services import camera_service
 from ..utils import secrets as gate_secrets
 
@@ -222,15 +222,17 @@ class GateStatusCameraFieldsTest(TestCase):
             name='Lane', host='10.0.0.5', snapshot_path='/snap.jpg',
             roi_x=0.1, roi_y=0.2, roi_w=0.3, roi_h=0.4,
         )
-        GateDevice.objects.create(name='Main', camera=camera, controller_type='simulator')
+        gate = GateDevice.objects.create(name='Main', controller_type='simulator')
+        GateCamera.objects.create(gate=gate, camera=camera, direction='in')
 
         operator = User.objects.create_user('guard2', password='pw')
         operator.groups.add(Group.objects.get(name='gate_operator'))
         self.client.force_login(operator)
 
         gate = self.client.get('/api/v1/gate/status/').json()['gates'][0]
-        self.assertEqual(gate['camera_roi'], {'x': 0.1, 'y': 0.2, 'w': 0.3, 'h': 0.4})
-        self.assertTrue(gate['camera_enabled'])
+        self.assertEqual(gate['cameras'][0]['roi'], {'x': 0.1, 'y': 0.2, 'w': 0.3, 'h': 0.4})
+        self.assertEqual(gate['cameras'][0]['direction'], 'in')
+        self.assertTrue(gate['cameras'][0]['is_enabled'])
 
 
 class VendorPresetTest(TestCase):

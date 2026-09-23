@@ -23,7 +23,7 @@ There is no linter, formatter, or typecheck configured.
 
 - **`lpr_project/`** — Django project config (`settings.py`, `urls.py`, `wsgi.py`)
 - **`lpr_app/`** — The sole Django app containing all business logic
-  - `models.py` — `UploadedImage`, `ProcessingLog`; gate: `Vehicle`, `Camera`, `GateDevice`, `AccessEvent`, `GateConfigChange`
+  - `models.py` — `UploadedImage`, `ProcessingLog`; gate: `Vehicle`, `Camera`, `GateDevice`, `GateCamera`, `AccessEvent`, `GateConfigChange`
   - `views/` — API-only view subpackage: `api_views.py`, `file_views.py`, `auth_views.py`, `gate_views.py`, `gate_admin_views.py`
   - `services/` — Business logic layer
     - `qwen_client.py` — OpenAI-compatible client for Qwen3-VL, prompt templates, coordinate conversion
@@ -122,6 +122,8 @@ Gate gotchas:
 - Browsers cannot play RTSP, so the live view polls `/api/v1/gate/cameras/<id>/snapshot/` (operator login), which fetches one JPEG through `camera_service.live_snapshot` — same network allowlist as the connection test, and it never exposes camera credentials. Unlike the one-off connection test, the live path keeps one session per camera with the authentication already negotiated (a fresh Digest handshake would cost a second request per frame) and every viewer shares that one fetcher. It uses `Camera.live_snapshot_path` (vendor presets point it at the sub-stream, which is cheaper for the camera to encode) and falls back to `snapshot_path` on a 404. The recognition path the agent uses is untouched.
 - Gate frames are `UploadedImage` rows with `source='gate'`. They are excluded from the public image list/detail/download endpoints and from `retry_stuck_images`; serve them only via `/api/v1/gate/events/<id>/image/<type>/` (operator login).
 - The OpenAI client has no request timeout of its own (SDK default 600s). The gate decision bounds it with `GATE_DECIDE_TIMEOUT` in `gate_service.read_frames`; frames that finish late are deleted.
+- A gate has **several cameras**, one per direction, through `GateCamera` (`gate`, `camera`, `direction` in/out). Two is the working minimum — one watching vehicles arrive, one watching them leave — but fewer only produces a warning (`GateDevice.camera_warning()`), never a refusal, since an installer assigns them over time. The agent runs one worker per camera and sends `camera_id` with each decision, which is how an event gets its `direction`.
+- `GateDevice.exit_policy` decides what a camera watching the exit does: `registered` applies the registry as at the entry, `any` opens for every vehicle while still reading and logging the plate (`reason='exit_free'`), so a visitor's entry and exit can still be matched up.
 - Django never contacts an ESP32 controller. The gate agent relays every command, including manual overrides (queued as `AccessEvent`s and claimed via `/api/v1/gate/agent-commands/`).
 - A gate with `controller_type='simulator'` is driven by `services/barrier_simulator.py`, served at `/api/v1/gate/sim/<id>/<command>` with the exact ESP32 contract. Simulated gates receive commands even in shadow mode (`gate_service.can_actuate`): shadow forbids *physical* actuation only. The Django admin page `/admin/lpr_app/gatedevice/<id>/test/` runs uploaded photos through the real decision pipeline (`is_test=True`, excluded from metrics) and animates the simulated arm.
 - Gate agent env vars (`LPR_API_URL`, `GATE_AGENT_TOKEN`, `AGENT_*`) are documented in `gate-agent/README.md`; `GATE_AGENT_METRICS_PORT` sets the published metrics port in compose (default `9101`).

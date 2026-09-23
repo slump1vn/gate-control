@@ -188,12 +188,20 @@ export const REASONS: Record<string, string> = {
   inference_timeout: 'Recognition timed out',
   processing_error: 'Recognition failed',
   manual_override: 'Manual override',
+  exit_free: 'Exit open to every vehicle',
+};
+
+export const DIRECTION_LABELS: Record<string, string> = {
+  in: 'Entry',
+  out: 'Exit',
 };
 
 export interface AccessEvent {
   id: number;
   timestamp: string | null;
   gate: { id: number; name: string } | null;
+  camera: { id: number; name: string } | null;
+  direction: '' | Direction;
   plate_raw: string;
   plate_normalized: string;
   confidence: number | null;
@@ -217,6 +225,7 @@ export interface AccessEvent {
 
 export interface AccessEventFilters {
   gate?: number | string;
+  direction?: string;
   decision?: string;
   reason?: string;
   plate?: string;
@@ -269,12 +278,26 @@ export interface SimulatorState {
   firmware_version: string;
 }
 
+export type Direction = 'in' | 'out';
+
+export interface GateCamera {
+  id: number;
+  name: string;
+  direction: Direction;
+  is_enabled: boolean;
+  roi: Roi | null;
+  agent_status: string | null;
+}
+
 export interface GateDevice {
   id: number;
   name: string;
   location: string;
-  direction: 'in' | 'out';
-  camera: { id: number; name: string } | null;
+  /** One per direction: a gate watches vehicles arriving and leaving. */
+  cameras: GateCamera[];
+  /** Why the cameras are not enough yet; empty when they are. */
+  camera_warning: string;
+  exit_policy: 'registered' | 'any';
   controller_type: 'esp32' | 'simulator';
   controller_url: string;
   controller_token_set: boolean;
@@ -290,9 +313,6 @@ export interface GateDevice {
 
 export interface GateStatus extends GateDevice {
   simulator: SimulatorState | null;
-  camera_status: string | null;
-  camera_roi: Roi | null;
-  camera_enabled: boolean | null;
   last_event: AccessEvent | null;
 }
 
@@ -431,8 +451,8 @@ export function testCamera(data: Partial<CameraInput> & { camera_id?: number }) 
 export interface GateDeviceInput {
   name: string;
   location: string;
-  direction: 'in' | 'out';
-  camera: number | null;
+  cameras: { camera: number; direction: Direction }[];
+  exit_policy: 'registered' | 'any';
   controller_type: 'esp32' | 'simulator';
   controller_url: string;
   controller_token?: string;

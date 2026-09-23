@@ -19,7 +19,7 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
 from ..forms import CameraForm, GateDeviceForm, VehicleForm
-from ..models import AccessEvent, Camera, GateConfigChange, GateDevice, Vehicle
+from ..models import AccessEvent, Camera, GateCamera, GateConfigChange, GateDevice, Vehicle
 from ..services import barrier_simulator, camera_service, config_audit, gate_service
 from ..utils.auth import require_gate_admin, require_gate_operator
 from ..utils.gate_serializers import (
@@ -181,11 +181,50 @@ def api_camera_test(request):
 # Gate devices
 # ---------------------------------------------------------------------------
 
+def _save_gate_cameras(gate, body):
+    """
+    Replace the gate's cameras from a list of {camera, direction}. Returns an
+    error response, or None. Leaving 'cameras' out keeps the current ones.
+    """
+    if 'cameras' not in body:
+        return None
+    items = body['cameras'] or []
+    if not isinstance(items, list):
+        return error('cameras must be a list of {camera, direction}', 'VALIDATION_ERROR')
+
+    links = []
+    seen = set()
+    for item in items:
+        if not isinstance(item, dict):
+            return error('cameras must be a list of {camera, direction}', 'VALIDATION_ERROR')
+        camera_id = item.get('camera') or item.get('id')
+        direction = item.get('direction', 'in')
+        if direction not in ('in', 'out'):
+            return error(f'Unknown direction {direction!r}', 'VALIDATION_ERROR')
+        camera = Camera.objects.filter(pk=camera_id).first()
+        if camera is None:
+            return error(f'Camera {camera_id} not found', 'NOT_FOUND', status=404)
+        if camera.pk in seen:
+            return error(f'Camera "{camera.name}" is listed twice', 'VALIDATION_ERROR')
+        seen.add(camera.pk)
+        links.append(GateCamera(gate=gate, camera=camera, direction=direction))
+
+    gate.gate_cameras.exclude(camera_id__in=seen).delete()
+    for link in links:
+        GateCamera.objects.update_or_create(
+            gate=gate, camera=link.camera, defaults={'direction': link.direction},
+        )
+    # The caller may hold a prefetched list of the old links
+    gate._prefetched_objects_cache = {}
+    return None
+
+
 @require_http_methods(["GET", "POST"])
 @require_gate_admin
 def api_gate_devices(request):
     if request.method == 'GET':
-        return JsonResponse({'results': [serialize_gate(g) for g in GateDevice.objects.select_related('camera')]})
+        gates = GateDevice.objects.prefetch_related('gate_cameras__camera')
+        return JsonResponse({'results': [serialize_gate(g) for g in gates]})
 
     body, err = _parse(request)
     if err:
@@ -194,13 +233,16 @@ def api_gate_devices(request):
     if not form.is_valid():
         return form_errors(form)
     gate = config_audit.save_gate_device(form.instance, request.user, token=form.cleaned_data.get('controller_token'))
+    err = _save_gate_cameras(gate, body)
+    if err:
+        return err
     return JsonResponse(serialize_gate(gate), status=201)
 
 
 @require_http_methods(["GET", "PUT", "PATCH", "DELETE"])
 @require_gate_admin
 def api_gate_device_detail(request, gate_id):
-    gate = GateDevice.objects.select_related('camera').filter(pk=gate_id).first()
+    gate = GateDevice.objects.prefetch_related('gate_cameras__camera').filter(pk=gate_id).first()
     if gate is None:
         return error('Gate not found', 'NOT_FOUND', status=404)
 
@@ -218,6 +260,9 @@ def api_gate_device_detail(request, gate_id):
     if not form.is_valid():
         return form_errors(form)
     gate = config_audit.save_gate_device(form.instance, request.user, token=form.cleaned_data.get('controller_token'))
+    err = _save_gate_cameras(gate, body)
+    if err:
+        return err
     return JsonResponse(serialize_gate(gate))
 
 
@@ -319,11 +364,13 @@ def api_plate_preview(request):
 @require_gate_operator
 def api_access_events(request):
     queryset = AccessEvent.objects.select_related(
-        'gate', 'vehicle', 'near_miss_vehicle', 'operator', 'uploaded_image',
+        'gate', 'camera', 'vehicle', 'near_miss_vehicle', 'operator', 'uploaded_image',
     )
     params = request.GET
     if params.get('gate', '').isdigit():
         queryset = queryset.filter(gate_id=int(params['gate']))
+    if params.get('direction') in ('in', 'out'):
+        queryset = queryset.filter(direction=params['direction'])
     if params.get('decision'):
         queryset = queryset.filter(decision=params['decision'])
     if params.get('reason'):

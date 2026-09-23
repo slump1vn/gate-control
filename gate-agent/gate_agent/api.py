@@ -36,10 +36,14 @@ class LprApi:
             return None
         return self._check(response).json()
 
-    def decide(self, gate_id, jpeg_frames, timeout):
+    def decide(self, gate_id, jpeg_frames, timeout, camera_id=None):
         files = [('frames', (f'frame{i}.jpg', data, 'image/jpeg')) for i, data in enumerate(jpeg_frames)]
+        data = {'gate_id': gate_id}
+        if camera_id is not None:
+            # Tells the service which way the vehicle was going
+            data['camera_id'] = camera_id
         response = self.session.post(
-            self._url('/api/v1/gate/decide/'), data={'gate_id': gate_id}, files=files, timeout=timeout,
+            self._url('/api/v1/gate/decide/'), data=data, files=files, timeout=timeout,
         )
         return self._check(response).json()
 

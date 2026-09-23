@@ -401,12 +401,19 @@ class Camera(models.Model):
 
 
 class GateDevice(models.Model):
-    """A barrier gate: its camera and its ESP32 relay controller."""
+    """A barrier gate: the cameras watching its lane and its relay controller."""
 
     DIRECTIONS = [
         ('in', 'Entry'),
         ('out', 'Exit'),
     ]
+    EXIT_POLICIES = [
+        ('registered', 'Only registered vehicles'),
+        ('any', 'Every vehicle (plates are still read and logged)'),
+    ]
+    # A gate watches both directions, so it needs a camera for each. Fewer is
+    # allowed — an installer configures them one at a time — but the admin says so.
+    RECOMMENDED_CAMERAS = 2
     CONTROLLER_TYPES = [
         ('esp32', 'ESP32 relay controller'),
         ('simulator', 'Simulated barrier (no hardware)'),
@@ -421,9 +428,13 @@ class GateDevice(models.Model):
 
     name = models.CharField(max_length=100, unique=True)
     location = models.CharField(max_length=255, blank=True)
-    direction = models.CharField(max_length=4, choices=DIRECTIONS, default='in')
-    camera = models.ForeignKey(
-        Camera, null=True, blank=True, on_delete=models.SET_NULL, related_name='gates',
+    cameras = models.ManyToManyField(
+        Camera, through='GateCamera', related_name='gates', blank=True,
+    )
+    exit_policy = models.CharField(
+        max_length=12, choices=EXIT_POLICIES, default='registered',
+        help_text='What happens when a camera watching the exit reads a vehicle. '
+                  '"Every vehicle" still reads and logs the plate, but opens regardless.',
     )
     controller_type = models.CharField(
         max_length=10, choices=CONTROLLER_TYPES, default='esp32',
@@ -466,6 +477,24 @@ class GateDevice(models.Model):
     def is_simulated(self):
         return self.controller_type == 'simulator'
 
+    @property
+    def watches_both_directions(self):
+        """A gate should see vehicles arriving and leaving."""
+        directions = {link.direction for link in self.gate_cameras.all()}
+        return {'in', 'out'} <= directions
+
+    def camera_warning(self):
+        """Why this gate's cameras are not enough yet, or '' when they are."""
+        links = list(self.gate_cameras.all())
+        if len(links) < self.RECOMMENDED_CAMERAS:
+            return (f'{len(links)} of {self.RECOMMENDED_CAMERAS} cameras assigned. '
+                    f'A gate needs one watching vehicles arriving and one watching them leave.')
+        directions = {link.direction for link in links}
+        if not {'in', 'out'} <= directions:
+            missing = 'entry' if 'in' not in directions else 'exit'
+            return f'No camera is watching the {missing} direction.'
+        return ''
+
     def is_online(self, now=None):
         if self.is_simulated:
             return True
@@ -476,6 +505,27 @@ class GateDevice(models.Model):
         return (now - self.last_seen).total_seconds() <= timeout
 
 
+class GateCamera(models.Model):
+    """
+    A camera watching one direction of a gate. A gate normally has two: one
+    looking at vehicles arriving, one at vehicles leaving.
+    """
+
+    gate = models.ForeignKey(GateDevice, on_delete=models.CASCADE, related_name='gate_cameras')
+    camera = models.ForeignKey(Camera, on_delete=models.CASCADE, related_name='gate_links')
+    direction = models.CharField(max_length=4, choices=GateDevice.DIRECTIONS, default='in')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Gate Camera"
+        verbose_name_plural = "Gate Cameras"
+        ordering = ['direction', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['gate', 'camera'], name='unique_gate_camera'),
+        ]
+
+    def __str__(self):
+        return f'{self.camera} watching {self.get_direction_display().lower()} at {self.gate}'
 class AccessEvent(models.Model):
     """One gate decision: automatic grant/deny or a manual override."""
 
@@ -497,6 +547,7 @@ class AccessEvent(models.Model):
         ('inference_timeout', 'Recognition timed out'),
         ('processing_error', 'Recognition failed'),
         ('manual_override', 'Manual override'),
+        ('exit_free', 'Exit open to every vehicle'),
     ]
 
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -513,6 +564,13 @@ class AccessEvent(models.Model):
     )
     near_miss_vehicle = models.ForeignKey(
         Vehicle, null=True, blank=True, on_delete=models.SET_NULL, related_name='near_miss_events',
+    )
+    camera = models.ForeignKey(
+        Camera, null=True, blank=True, on_delete=models.SET_NULL, related_name='events',
+    )
+    direction = models.CharField(
+        max_length=4, choices=GateDevice.DIRECTIONS, blank=True,
+        help_text='Which way the vehicle was going, from the camera that read it.',
     )
     decision = models.CharField(max_length=10, choices=DECISIONS, db_index=True)
     reason = models.CharField(max_length=24, choices=REASONS, db_index=True)

@@ -11,7 +11,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from lpr_app.models import AccessEvent, Camera, GateConfigChange, GateDevice, UploadedImage, Vehicle
+from lpr_app.models import (
+    AccessEvent, Camera, GateCamera, GateConfigChange, GateDevice, UploadedImage, Vehicle,
+)
 from lpr_app.services import gate_service
 from lpr_app.services.camera_service import ConnectionTestResult, TestStep
 
@@ -254,15 +256,19 @@ class GateDeviceApiTest(ApiTestBase):
     def test_crud(self):
         self.as_admin()
         cam = Camera.objects.create(name='Cam', host='192.168.1.64')
+        exit_cam = Camera.objects.create(name='Cam out', host='192.168.1.65')
         response = self.send('post', '/api/v1/gate/devices/', {
-            'name': 'Main', 'camera': cam.id, 'controller_url': 'http://192.168.1.50',
-            'controller_token': 'tok',
+            'name': 'Main', 'controller_url': 'http://192.168.1.50', 'controller_token': 'tok',
+            'cameras': [{'camera': cam.id, 'direction': 'in'}, {'camera': exit_cam.id, 'direction': 'out'}],
         })
         self.assertEqual(response.status_code, 201, response.content)
         data = response.json()
         self.assertTrue(data['controller_token_set'])
         self.assertTrue(data['is_enabled'])
-        self.assertEqual(data['camera']['id'], cam.id)
+        self.assertEqual([(c['id'], c['direction']) for c in data['cameras']],
+                         [(cam.id, 'in'), (exit_cam.id, 'out')])
+        self.assertEqual(data['camera_warning'], '')
+        self.assertEqual(data['exit_policy'], 'registered')
         self.assertNotIn('tok', json.dumps({k: v for k, v in data.items() if k != 'controller_token_set'}))
         gate_id = data['id']
 
@@ -271,7 +277,13 @@ class GateDeviceApiTest(ApiTestBase):
         self.assertEqual(GateDevice.objects.get().get_controller_token(), 'tok')
         self.assertEqual(self.client.get('/api/v1/gate/devices/').json()['results'][0]['name'], 'Main')
         self.assertEqual(self.client.get(f'/api/v1/gate/devices/{gate_id}/').status_code, 200)
-        self.assertEqual(self.send('patch', f'/api/v1/gate/devices/{gate_id}/', {'direction': 'sideways'}).status_code, 400)
+        self.assertEqual(self.send('patch', f'/api/v1/gate/devices/{gate_id}/',
+                                   {'cameras': [{'camera': cam.id, 'direction': 'sideways'}]}).status_code, 400)
+        # Dropping a camera leaves the gate short, and the API says so
+        data = self.send('patch', f'/api/v1/gate/devices/{gate_id}/',
+                         {'cameras': [{'camera': cam.id, 'direction': 'in'}]}).json()
+        self.assertEqual(len(data['cameras']), 1)
+        self.assertIn('1 of 2 cameras', data['camera_warning'])
         self.assertEqual(self.client.delete(f'/api/v1/gate/devices/{gate_id}/').status_code, 200)
         self.assertEqual(self.client.get(f'/api/v1/gate/devices/{gate_id}/').status_code, 404)
 
@@ -468,7 +480,7 @@ class OverrideAndCommandQueueTest(ApiTestBase):
     def test_status(self):
         self.as_operator()
         cam = Camera.objects.create(name='Cam', host='192.168.1.64', agent_status='streaming')
-        self.gate.camera = cam
+        GateCamera.objects.create(gate=self.gate, camera=cam, direction='in')
         self.gate.last_seen = timezone.now()
         self.gate.save()
         AccessEvent.objects.create(gate=self.gate, decision='denied', reason='no_plate')
@@ -476,7 +488,8 @@ class OverrideAndCommandQueueTest(ApiTestBase):
         self.assertEqual(data['mode'], 'shadow')
         gate = data['gates'][0]
         self.assertTrue(gate['online'])
-        self.assertEqual(gate['camera_status'], 'streaming')
+        self.assertEqual(gate['cameras'][0]['agent_status'], 'streaming')
+        self.assertIn('1 of 2 cameras', gate['camera_warning'])
         self.assertEqual(gate['last_event']['reason'], 'no_plate')
         self.client.logout()
         self.assertEqual(self.client.get('/api/v1/gate/status/').status_code, 403)
@@ -490,9 +503,10 @@ class AgentConfigTest(ApiTestBase):
                           roi_x=0.1, roi_y=0.2, roi_w=0.5, roi_h=0.5)
         self.cam.set_password('cam-test-pass')
         self.cam.save()
-        self.gate = GateDevice(name='Main', camera=self.cam, controller_url='http://192.168.1.50')
+        self.gate = GateDevice(name='Main', controller_url='http://192.168.1.50')
         self.gate.set_controller_token('dev-tok')
         self.gate.save()
+        GateCamera.objects.create(gate=self.gate, camera=self.cam, direction='in')
 
     def test_config_contains_credentials_for_agent_only(self):
         response = self.client.get('/api/v1/gate/agent-config/', **AGENT)
@@ -500,9 +514,10 @@ class AgentConfigTest(ApiTestBase):
         data = response.json()
         gate = data['gates'][0]
         self.assertEqual(gate['controller_token'], 'dev-tok')
-        self.assertEqual(gate['camera']['password'], 'cam-test-pass')
-        self.assertEqual(gate['camera']['main_stream_path'], '/Streaming/Channels/101')
-        self.assertEqual(gate['camera']['roi'], {'x': 0.1, 'y': 0.2, 'w': 0.5, 'h': 0.5})
+        self.assertEqual(gate['cameras'][0]['password'], 'cam-test-pass')
+        self.assertEqual(gate['cameras'][0]['direction'], 'in')
+        self.assertEqual(gate['cameras'][0]['main_stream_path'], '/Streaming/Channels/101')
+        self.assertEqual(gate['cameras'][0]['roi'], {'x': 0.1, 'y': 0.2, 'w': 0.5, 'h': 0.5})
         self.assertEqual(data['mode'], 'shadow')
         self.assertEqual(response['ETag'], f'"{data["version"]}"')
 
@@ -522,13 +537,13 @@ class AgentConfigTest(ApiTestBase):
         response = self.client.get(f'/api/v1/gate/agent-config/?version={version}', **AGENT)
         self.assertEqual(response.status_code, 200)
         self.assertNotEqual(response.json()['version'], version)
-        self.assertEqual(response.json()['gates'][0]['camera']['host'], '192.168.1.65')
+        self.assertEqual(response.json()['gates'][0]['cameras'][0]['host'], '192.168.1.65')
 
     def test_disabled_gate_and_camera_omitted(self):
         self.cam.is_enabled = False
         self.cam.save()
         gate = self.client.get('/api/v1/gate/agent-config/', **AGENT).json()['gates'][0]
-        self.assertIsNone(gate['camera'])
+        self.assertEqual(gate['cameras'], [])
         GateDevice.objects.update(is_enabled=False)
         self.assertEqual(self.client.get('/api/v1/gate/agent-config/', **AGENT).json()['gates'], [])
 
@@ -537,7 +552,7 @@ class AgentConfigTest(ApiTestBase):
             gate = self.client.get('/api/v1/gate/agent-config/', **AGENT).json()['gates'][0]
         self.assertIsNone(gate['controller_token'])
         self.assertEqual(gate['controller_token_error'], 'token_unavailable')
-        self.assertEqual(gate['camera']['credential_error'], 'password_unavailable')
+        self.assertEqual(gate['cameras'][0]['credential_error'], 'password_unavailable')
 
     @override_settings(GATE_AUTO_CLOSE='software')
     def test_software_close_refused_without_safety_input(self):

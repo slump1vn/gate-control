@@ -8,7 +8,7 @@ const meta: Meta<typeof GateDeviceForm> = {
   component: GateDeviceForm,
   tags: ['autodocs'],
   args: {
-    cameras: [{ id: 1, name: 'Camera cổng chính' }, { id: 2, name: 'Camera cổng sau' }],
+    cameras: [{ id: 1, name: 'Camera vào' }, { id: 2, name: 'Camera ra' }, { id: 3, name: 'Camera làn xe máy' }],
     onSubmit: fn(async () => {}),
     onCancel: fn(),
   },
@@ -18,6 +18,7 @@ const meta: Meta<typeof GateDeviceForm> = {
 export default meta;
 type Story = StoryObj<typeof GateDeviceForm>;
 
+/** A new gate starts with a row for each direction. */
 export const NewSimulated: Story = {};
 export const Esp32: Story = {
   args: { gate: { ...mockGateDevice, controller_type: 'esp32', controller_url: 'http://192.168.1.50/' } },

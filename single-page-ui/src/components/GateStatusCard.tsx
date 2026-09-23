@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { DIRECTION_LABELS } from '@/lib/gate-api';
 import type { Command, GateStatus } from '@/lib/gate-api';
 import BarrierArm from './BarrierArm';
 import CameraStatusBadge from './CameraStatusBadge';
@@ -36,9 +37,7 @@ export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCard
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold">{gate.name}</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {gate.direction === 'in' ? 'Entry' : 'Exit'}{gate.location ? ` · ${gate.location}` : ''}
-          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{gate.location}</p>
         </div>
         <div className="flex flex-wrap gap-1 justify-end">
           {simulated && <Badge color="purple">Simulated</Badge>}
@@ -53,8 +52,16 @@ export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCard
         <BarrierArm state={armState} position={gate.simulator?.position} />
         <dl className="text-sm space-y-1">
           <div className="flex justify-between gap-2">
-            <dt className="text-gray-500 dark:text-gray-400">Camera</dt>
-            <dd className="text-right">{gate.camera ? <>{gate.camera.name} <CameraStatusBadge status={gate.camera_status} /></> : <span className="text-gray-400">none</span>}</dd>
+            <dt className="text-gray-500 dark:text-gray-400">Cameras</dt>
+            <dd className="text-right space-y-0.5">
+              {gate.cameras.length === 0 ? <span className="text-gray-400">none</span> : gate.cameras.map((cam) => (
+                <div key={cam.id} className="flex items-center justify-end gap-1">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{DIRECTION_LABELS[cam.direction]}</span>
+                  <span className="truncate max-w-[9rem]">{cam.name}</span>
+                  <CameraStatusBadge status={cam.agent_status} />
+                </div>
+              ))}
+            </dd>
           </div>
           <div className="flex justify-between gap-2">
             <dt className="text-gray-500 dark:text-gray-400">Last command</dt>
@@ -103,6 +110,9 @@ export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCard
           STOP
         </button>
       </div>
+      {gate.camera_warning && (
+        <p className="text-xs text-yellow-700 dark:text-yellow-400">{gate.camera_warning}</p>
+      )}
       {commandsLogged && (
         <p className="text-xs text-yellow-700 dark:text-yellow-400">
           Shadow mode: commands for this gate are recorded but not sent to the barrier.

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getApiBase } from '@/lib/api';
-import { getAccessEvents, getGateStatus } from '@/lib/gate-api';
+import { DIRECTION_LABELS, getAccessEvents, getGateStatus } from '@/lib/gate-api';
 import type { AccessEvent, GateStatusResponse } from '@/lib/gate-api';
 import { usePolling } from '@/hooks/usePolling';
 import RequireRole from '@/components/RequireRole';
@@ -85,29 +85,40 @@ function MonitorContent() {
               <header className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div>
                   <h2 className="font-semibold">{gate.name}</h2>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {gate.camera ? gate.camera.name : 'No camera'}{gate.location ? ` · ${gate.location}` : ''}
-                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{gate.location}</p>
                 </div>
-                <div className="flex flex-wrap gap-1 justify-end">
-                  {gate.camera && <CameraStatusBadge status={gate.camera_status} />}
-                  {gate.camera_enabled === false && <Badge color="gray">Camera disabled</Badge>}
-                  <Badge color={gate.online ? 'green' : 'red'}>{gate.online ? 'Controller online' : 'Controller offline'}</Badge>
-                </div>
+                <Badge color={gate.online ? 'green' : 'red'}>{gate.online ? 'Controller online' : 'Controller offline'}</Badge>
               </header>
 
-              {gate.camera ? (
-                <LiveCameraView
-                  cameraId={gate.camera.id}
-                  apiBase={apiBase}
-                  intervalMs={intervalMs}
-                  roi={gate.camera_roi}
-                  showRoi={showRoi}
-                />
+              {gate.cameras.length > 0 ? (
+                <div className={`grid gap-3 ${gate.cameras.length > 1 ? 'sm:grid-cols-2' : ''}`}>
+                  {gate.cameras.map((cam) => (
+                    <div key={cam.id}>
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <Badge color={cam.direction === 'in' ? 'blue' : 'purple'}>{DIRECTION_LABELS[cam.direction]}</Badge>
+                        <span className="text-sm truncate">{cam.name}</span>
+                        <span className="ml-auto flex gap-1">
+                          {!cam.is_enabled && <Badge color="gray">Disabled</Badge>}
+                          <CameraStatusBadge status={cam.agent_status} />
+                        </span>
+                      </div>
+                      <LiveCameraView
+                        cameraId={cam.id}
+                        apiBase={apiBase}
+                        intervalMs={intervalMs}
+                        roi={cam.roi}
+                        showRoi={showRoi}
+                      />
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <div className="aspect-video rounded-lg bg-gray-100 dark:bg-[#2d2d2d] flex items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                  Assign a camera to this gate to see the lane
+                  Assign cameras to this gate to see the lane
                 </div>
+              )}
+              {gate.camera_warning && (
+                <p className="mt-2 text-xs text-yellow-700 dark:text-yellow-400">{gate.camera_warning}</p>
               )}
 
               <div className="flex items-center gap-4 mt-3">

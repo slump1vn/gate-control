@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A gate is watched by several cameras, each assigned a direction (`GateCamera`): normally one for vehicles arriving and one for those leaving, with a warning while fewer are assigned. Access events record which camera read the vehicle and which way it was going, and the event log can be filtered by direction
+- `GateDevice.exit_policy`: a camera watching the exit either applies the registry (default) or opens for every vehicle while still logging its plate
 - Gate automation (openspec change `2026-09-22-anpr-gate-automation`): vehicle registry with Vietnamese plate normalisation, consensus-based access decisions (`/api/v1/gate/decide/`), cameras managed from the admin with encrypted credentials and a connection test, access event log with retention, manual overrides through an agent command queue, gate metrics (`lpr_gate_*`)
 - Session login for the SPA (`/api/v1/auth/`) with `gate_admin` / `gate_operator` roles
 - Simulated barrier implementing the ESP32 controller contract, and a Django admin "Test recognition" page that runs uploaded photos through the decision pipeline and animates the simulated arm

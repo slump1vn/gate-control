@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { usePolling } from '@/hooks/usePolling';
 import Link from 'next/link';
 import { getApiBase } from '@/lib/api';
-import { createGateDevice, deleteGateDevice, getCameras, getGateDevices, updateGateDevice } from '@/lib/gate-api';
+import {
+  DIRECTION_LABELS, createGateDevice, deleteGateDevice, getCameras, getGateDevices, updateGateDevice,
+} from '@/lib/gate-api';
 import type { GateDevice, GateDeviceInput } from '@/lib/gate-api';
 import RequireRole from '@/components/RequireRole';
 import GateDeviceForm from '@/components/GateDeviceForm';
@@ -74,7 +76,7 @@ function GatesContent() {
             <thead className="bg-gray-50 dark:bg-[#1a1a1a] text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
               <tr>
                 <th className="px-4 py-3">Gate</th>
-                <th className="px-4 py-3">Camera</th>
+                <th className="px-4 py-3">Cameras</th>
                 <th className="px-4 py-3">Controller</th>
                 <th className="px-4 py-3">State</th>
                 <th className="px-4 py-3 text-right"><span className="sr-only">Actions</span></th>
@@ -85,12 +87,24 @@ function GatesContent() {
                 <tr key={g.id}>
                   <td className="px-4 py-3">
                     <div className="font-medium">{g.name}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">{g.direction === 'in' ? 'Entry' : 'Exit'}{g.location ? ` · ${g.location}` : ''}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">{g.location}</div>
                   </td>
                   <td className="px-4 py-3">
-                    {g.camera
-                      ? <Link href={`/manage/cameras/${g.camera.id}`} className="text-purple-600 dark:text-purple-400 hover:underline">{g.camera.name}</Link>
-                      : <span className="text-gray-400">none</span>}
+                    {g.cameras.length === 0 ? <span className="text-gray-400">none</span> : (
+                      <ul className="space-y-0.5">
+                        {g.cameras.map((c) => (
+                          <li key={c.id} className="flex items-center gap-1">
+                            <Badge color={c.direction === 'in' ? 'blue' : 'purple'}>{DIRECTION_LABELS[c.direction]}</Badge>
+                            <Link href={`/manage/cameras/${c.id}`} className="text-purple-600 dark:text-purple-400 hover:underline">{c.name}</Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {g.camera_warning && (
+                      <div className="text-xs text-yellow-700 dark:text-yellow-400 mt-1" title={g.camera_warning}>
+                        ⚠ {g.camera_warning}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {g.controller_type === 'simulator'

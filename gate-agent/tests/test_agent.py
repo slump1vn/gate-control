@@ -25,16 +25,25 @@ def frame(car=False):
     return image
 
 
-def gate_config(gate_id=1, camera=True, **extra):
+def camera_config(camera_id, direction='in'):
+    return {
+        'id': camera_id, 'name': f'Camera {camera_id}', 'direction': direction,
+        'host': '192.168.1.64', 'snapshot_path': '/snap', 'prefer_snapshot': True,
+        'roi': None, 'motion_threshold': 0.02, 'settle_ms': 800, 'cooldown_s': 5, 'config_version': 1,
+        'password': 'pw',
+    }
+
+
+def gate_config(gate_id=1, camera=True, cameras=None, **extra):
+    """camera=True gives the gate one entry camera; pass cameras=[...] for more."""
+    if cameras is None:
+        cameras = [camera_config(10 + gate_id)] if camera else []
     gate = {
         'id': gate_id, 'name': f'Gate {gate_id}', 'controller_type': 'simulator',
         'controller_url': f'http://lpr/api/v1/gate/sim/{gate_id}/', 'controller_token': 'tok',
         'auto_close': 'controller', 'auto_close_seconds': 10, 'config_errors': [],
-        'camera': {
-            'id': 10 + gate_id, 'host': '192.168.1.64', 'snapshot_path': '/snap', 'prefer_snapshot': True,
-            'roi': None, 'motion_threshold': 0.02, 'settle_ms': 800, 'cooldown_s': 5, 'config_version': 1,
-            'password': 'pw',
-        } if camera else None,
+        'exit_policy': 'registered',
+        'cameras': cameras,
     }
     gate.update(extra)
     return gate
@@ -82,10 +91,11 @@ class Clock:
 
 
 class GateWorkerTest(unittest.TestCase):
-    def make_worker(self, frames, api=None, controller=None, gate=None, **kw):
+    def make_worker(self, frames, api=None, controller=None, gate=None, camera=None, **kw):
         api = api or mock.Mock()
+        gate = gate or gate_config()
         worker = GateWorker(
-            gate or gate_config(), config(), settings(), api, controller,
+            gate, camera or gate['cameras'][0], config(), settings(), api, controller,
             source_factory=lambda camera: FakeSource(frames), clock=Clock(), sleep=lambda s: None, **kw,
         )
         return worker, api
@@ -164,7 +174,7 @@ class GateWorkerTest(unittest.TestCase):
 
     def test_roi_applied(self):
         gate = gate_config()
-        gate['camera']['roi'] = {'x': 0.0, 'y': 0.0, 'w': 0.5, 'h': 0.5}
+        gate['cameras'][0]['roi'] = {'x': 0.0, 'y': 0.0, 'w': 0.5, 'h': 0.5}
         worker, _ = self.make_worker([frame()], gate=gate)
         self.assertEqual(worker._grab().size, (160, 90))
 
@@ -206,9 +216,8 @@ class SendAndReportTest(unittest.TestCase):
 class FakeWorker:
     instances = []
 
-    def __init__(self, gate, config, settings, api, controller):
-        self.gate, self.controller = gate, controller
-        self.camera = gate['camera']
+    def __init__(self, gate, camera, config, settings, api, controller):
+        self.gate, self.camera, self.controller = gate, camera, controller
         self.camera_status = 'streaming'
         self.started = self.stopped = False
         FakeWorker.instances.append(self)
@@ -242,7 +251,7 @@ class AgentTest(unittest.TestCase):
 
         # Camera changed in the admin UI: worker restarted
         changed = gate_config(1)
-        changed['camera']['config_version'] = 2
+        changed['cameras'][0]['config_version'] = 2
         self.api.agent_config.return_value = config(changed, version='v3')
         self.agent.sync_config()
         self.assertTrue(first.stopped)
@@ -252,6 +261,24 @@ class AgentTest(unittest.TestCase):
         self.agent.sync_config()
         self.assertTrue(FakeWorker.instances[1].stopped)
         self.assertEqual(self.agent.workers, {})
+
+    def test_a_gate_runs_one_worker_per_camera(self):
+        gate = gate_config(1, cameras=[camera_config(11, 'in'), camera_config(12, 'out')])
+        self.api.agent_config.return_value = config(gate)
+        self.agent.sync_config()
+        self.assertEqual(len(FakeWorker.instances), 2)
+        self.assertEqual({w.camera['direction'] for w in FakeWorker.instances}, {'in', 'out'})
+        # One controller for the gate, shared by both workers
+        self.assertEqual({id(w.controller) for w in FakeWorker.instances}, {id(self.agent.controllers[1])})
+        self.assertEqual(set(self.agent.workers), {(1, 11), (1, 12)})
+
+        # Removing the exit camera stops only its worker
+        self.api.agent_config.return_value = config(
+            gate_config(1, cameras=[camera_config(11, 'in')]), version='v2')
+        self.agent.sync_config()
+        self.assertEqual(set(self.agent.workers), {(1, 11)})
+        stopped = [w for w in FakeWorker.instances if w.camera['id'] == 12]
+        self.assertTrue(stopped[0].stopped)
 
     def test_unchanged_and_failed_sync(self):
         self.api.agent_config.return_value = None
@@ -292,6 +319,12 @@ class AgentTest(unittest.TestCase):
         self.agent.apply_config(config(gate_config(1)))
         self.agent.report_status()
         self.api.agent_status.assert_called_once_with([{'id': 11, 'status': 'streaming'}])
+
+    def test_status_reports_every_camera(self):
+        self.agent.apply_config(config(gate_config(1, cameras=[camera_config(11, 'in'), camera_config(12, 'out')])))
+        self.agent.report_status()
+        reported = self.api.agent_status.call_args.args[0]
+        self.assertEqual(sorted(c['id'] for c in reported), [11, 12])
         self.api.agent_status.side_effect = ApiError('down')
         self.agent.report_status()
 

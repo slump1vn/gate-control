@@ -68,13 +68,27 @@ def serialize_camera(c):
     }
 
 
+def gate_camera(link):
+    camera = link.camera
+    return {
+        'id': camera.id,
+        'name': camera.name,
+        'direction': link.direction,
+        'is_enabled': camera.is_enabled,
+        'roi': camera.roi,
+        'agent_status': camera.agent_status or None,
+    }
+
+
 def serialize_gate(g):
+    links = list(g.gate_cameras.all())
     return {
         'id': g.id,
         'name': g.name,
         'location': g.location,
-        'direction': g.direction,
-        'camera': {'id': g.camera.id, 'name': g.camera.name} if g.camera else None,
+        'cameras': [gate_camera(link) for link in links],
+        'camera_warning': g.camera_warning(),
+        'exit_policy': g.exit_policy,
         'controller_type': g.controller_type,
         'controller_url': g.controller_url,
         'controller_token_set': g.controller_token_set,
@@ -102,6 +116,8 @@ def serialize_event(e):
         'frames_agreed': e.frames_agreed,
         'vehicle': vehicle_ref(e.vehicle),
         'near_miss_vehicle': vehicle_ref(e.near_miss_vehicle),
+        'camera': {'id': e.camera.id, 'name': e.camera.name} if e.camera else None,
+        'direction': e.direction,
         'decision': e.decision,
         'reason': e.reason,
         'reason_display': e.get_reason_display(),
