@@ -1,15 +1,19 @@
 """
 Frame sources and frame preparation.
 
-Snapshot over HTTP is preferred: no video decoding, full resolution, and
-Hikvision/Dahua cameras need Digest auth, which is handled here. RTSP needs
-OpenCV and is only imported when a camera has no snapshot endpoint. A
-directory source replays recorded frames for testing without a camera.
+Two ways to read a camera. Snapshot over HTTP needs no video decoding and
+gives full resolution, but costs the camera a request per frame, and some
+refuse when asked more than once or twice a second. RTSP costs one connection
+whatever the frame rate, so it is the way to watch a lane quickly; it needs
+OpenCV, imported only when used. Hikvision/Dahua need Digest auth, handled
+here. A directory source replays recorded frames for testing without a camera.
 """
 
 import io
 import os
 import re
+import threading
+import time
 from urllib.parse import quote
 
 import requests
@@ -85,9 +89,32 @@ class SnapshotSource:
 
 
 class RtspSource:
-    def __init__(self, url):
+    """
+    A live RTSP stream, read continuously in a background thread.
+
+    The camera serves one connection instead of answering a snapshot request
+    per frame, which is far cheaper for it and allows a much higher frame
+    rate. The thread matters: OpenCV buffers decoded frames, so a caller that
+    reads slower than the stream would get progressively older frames — the
+    plate of a vehicle that has already gone. The reader keeps only the latest
+    frame and drops the rest.
+    """
+
+    START_TIMEOUT = 10.0
+
+    def __init__(self, url, frame_timeout=5.0):
         self.url = url
+        self.frame_timeout = frame_timeout
         self.capture = None
+        self.cv2 = None
+        self.thread = None
+        self.stop_event = threading.Event()
+        self.lock = threading.Lock()
+        self.latest = None
+        self.seq = 0
+        self.taken = 0
+        self.error = None
+        self.new_frame = threading.Condition(self.lock)
 
     def _open(self):
         try:
@@ -95,24 +122,62 @@ class RtspSource:
         except ImportError:
             raise CameraError('RTSP needs opencv-python-headless, which is not installed')
         self.cv2 = cv2
-        self.capture = cv2.VideoCapture(self.url)
-        if not self.capture.isOpened():
-            self.capture = None
+        capture = cv2.VideoCapture(self.url)
+        if not capture.isOpened():
             raise CameraError('Cannot open RTSP stream')
+        try:
+            capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception:  # pragma: no cover - not every backend supports it
+            pass
+        self.capture = capture
+        self.stop_event.clear()
+        self.thread = threading.Thread(target=self._read_forever, name='rtsp-reader', daemon=True)
+        self.thread.start()
+
+    def _read_forever(self):
+        while not self.stop_event.is_set():
+            ok, frame = self.capture.read()
+            with self.new_frame:
+                if not ok:
+                    self.error = 'RTSP stream returned no frame'
+                    self.new_frame.notify_all()
+                    return
+                self.latest = frame
+                self.seq += 1
+                self.new_frame.notify_all()
 
     def grab(self):
         if self.capture is None:
             self._open()
-        ok, frame = self.capture.read()
-        if not ok:
+        deadline = time.monotonic() + self.frame_timeout
+        with self.new_frame:
+            while self.seq == self.taken and self.error is None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                self.new_frame.wait(remaining)
+            error, frame, seq = self.error, self.latest, self.seq
+            self.taken = seq
+        if error:
             self.close()
-            raise CameraError('RTSP stream returned no frame')
+            raise CameraError(error)
+        if frame is None:
+            self.close()
+            raise CameraError('No frame from the RTSP stream')
         return Image.fromarray(self.cv2.cvtColor(frame, self.cv2.COLOR_BGR2RGB))
 
     def close(self):
+        self.stop_event.set()
+        thread, self.thread = self.thread, None
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=2)
         if self.capture is not None:
             self.capture.release()
             self.capture = None
+        with self.new_frame:
+            self.latest = None
+            self.seq = self.taken = 0
+            self.error = None
 
     def describe(self):
         return redact(self.url)

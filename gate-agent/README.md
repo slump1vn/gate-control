@@ -30,7 +30,9 @@ python -m gate_agent replay --gate 1 ./recorded-frames      # recorded frames th
 | `AGENT_CONFIG_INTERVAL` | `30` | Seconds between config syncs |
 | `AGENT_COMMAND_POLL_INTERVAL` | `1` | Seconds between manual-command polls |
 | `AGENT_STATUS_INTERVAL` | `15` | Seconds between camera status reports |
-| `AGENT_FRAME_INTERVAL` | `0.4` | Seconds between frames for the presence trigger |
+| `AGENT_FRAME_INTERVAL` | `0.2` | Seconds between frames for the presence trigger (the loop paces itself, so this is the real rate) |
+| `AGENT_PREBUFFER_FRAMES` | `3` | Frames kept from before the trigger, used as the recognition burst |
+| `AGENT_MOVING_READ_SECONDS` | `2.0` | Read a vehicle that never stops after this long in the zone (`0` waits for a stop) |
 | `AGENT_BURST_INTERVAL` | `0.4` | Seconds between frames in a recognition burst |
 | `AGENT_PRESENCE_FACTOR` | `3.0` | Presence threshold = max(camera motion threshold × factor, 0.04) |
 | `AGENT_MAX_ATTEMPTS` | `2` | Reads per vehicle when the first one is denied |
@@ -47,6 +49,30 @@ The trigger compares a small greyscale copy of the camera's region of interest a
 - A granted vehicle is not read again. The next read needs the lane to clear, or a different vehicle to replace it.
 
 `motion_threshold`, `settle_ms`, `cooldown_s` and the ROI are set per camera in the admin.
+
+## Missing the plate of an arriving vehicle
+
+Three things decide whether the plate is caught, and all three are tunable.
+
+**1. How fast frames arrive.** The loop paces itself to `AGENT_FRAME_INTERVAL`,
+so 0.2 really means five frames a second. Watch `lpr_gate_agent_fps`: if it sits
+well below `1 / AGENT_FRAME_INTERVAL`, the camera is the limit — check
+`lpr_gate_agent_grab_seconds`.
+
+**2. Where the frames come from.** A snapshot costs the camera one HTTP request
+per frame, and many cameras answer HTTP 500 above about two a second. RTSP costs
+one connection whatever the rate, so for a fast lane turn off *Prefer snapshots
+over RTSP* on the camera. The agent reads RTSP in its own thread and always uses
+the newest frame, never a buffered one.
+
+**3. When the read fires.** A vehicle that stops is read once it has been still
+for `settle_ms`. A vehicle that rolls through never stops, so it is read anyway
+after `AGENT_MOVING_READ_SECONDS` in the zone. The burst itself uses the frames
+kept from *before* the trigger (`AGENT_PREBUFFER_FRAMES`), which show the vehicle
+arriving, rather than frames captured afterwards when it may already have moved on.
+
+If plates are still missed, in order: shrink the read zone to where the plate
+actually is, lower `settle_ms` on the camera, then lower `AGENT_FRAME_INTERVAL`.
 
 ## Testing recognition before the ESP32 exists
 

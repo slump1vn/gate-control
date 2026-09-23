@@ -1,4 +1,5 @@
 import io
+import time
 import os
 import shutil
 import tempfile
@@ -155,20 +156,67 @@ except ImportError:
 
 @unittest.skipUnless(HAVE_NUMPY, 'numpy not installed')
 class RtspFakeCv2Test(unittest.TestCase):
-    def test_reads_and_converts_frames(self):
+    """The reader runs in its own thread and keeps only the newest frame."""
+
+    def fake_cv2(self, frames, then_fail=True):
         import numpy as np
         cv2 = mock.Mock()
         capture = mock.Mock()
         capture.isOpened.return_value = True
-        capture.read.side_effect = [(True, np.zeros((10, 20, 3), dtype=np.uint8)), (False, None)]
+        queue = list(frames)
+
+        def read():
+            if queue:
+                value = queue.pop(0)
+                return True, np.full((10, 20, 3), value, dtype=np.uint8)
+            if then_fail:
+                return False, None
+            time.sleep(0.01)
+            return True, np.full((10, 20, 3), frames[-1], dtype=np.uint8)
+
+        capture.read.side_effect = read
         cv2.VideoCapture.return_value = capture
         cv2.cvtColor.side_effect = lambda frame, code: frame
+        return cv2, capture
+
+    def test_reads_and_converts_frames(self):
+        cv2, capture = self.fake_cv2([7], then_fail=False)
         with mock.patch.dict('sys.modules', {'cv2': cv2}):
             source = RtspSource('rtsp://x/')
-            self.assertEqual(source.grab().size, (20, 10))
+            self.addCleanup(source.close)
+            image = source.grab()
+        self.assertEqual(image.size, (20, 10))
+
+    def test_a_slow_caller_gets_the_newest_frame_not_the_oldest(self):
+        # The stream keeps producing while the caller is busy; a buffered read
+        # would hand back a frame from seconds ago.
+        cv2, capture = self.fake_cv2([1, 2, 3, 4, 5], then_fail=False)
+        with mock.patch.dict('sys.modules', {'cv2': cv2}):
+            source = RtspSource('rtsp://x/')
+            self.addCleanup(source.close)
+            source.grab()
+            time.sleep(0.2)
+            image = source.grab()
+        self.assertEqual(image.getpixel((0, 0))[0], 5)
+
+    def test_a_dropped_stream_is_reported(self):
+        cv2, capture = self.fake_cv2([], then_fail=True)
+        with mock.patch.dict('sys.modules', {'cv2': cv2}):
+            source = RtspSource('rtsp://x/')
             with self.assertRaises(CameraError):
                 source.grab()
         capture.release.assert_called_once()
+
+    def test_no_frame_within_the_timeout(self):
+        cv2 = mock.Mock()
+        capture = mock.Mock()
+        capture.isOpened.return_value = True
+        capture.read.side_effect = lambda: (time.sleep(0.05), (True, None))[1]
+        cv2.VideoCapture.return_value = capture
+        with mock.patch.dict('sys.modules', {'cv2': cv2}):
+            source = RtspSource('rtsp://x/', frame_timeout=0.05)
+            with self.assertRaises(CameraError):
+                source.grab()
 
     def test_stream_not_opened(self):
         cv2 = mock.Mock()

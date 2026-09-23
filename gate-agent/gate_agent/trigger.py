@@ -52,7 +52,8 @@ def difference(a, b):
 
 class PresenceTrigger:
     def __init__(self, motion_threshold=0.02, settle_ms=800, cooldown_s=5, presence_factor=3.0,
-                 max_attempts=2, max_occupied_seconds=300.0, background_alpha=0.05):
+                 max_attempts=2, max_occupied_seconds=300.0, background_alpha=0.05,
+                 moving_read_seconds=0.0):
         self.motion_threshold = motion_threshold
         self.presence_threshold = max(motion_threshold * presence_factor, 0.04)
         self.settle = settle_ms / 1000.0
@@ -60,10 +61,14 @@ class PresenceTrigger:
         self.max_attempts = max_attempts
         self.max_occupied = max_occupied_seconds
         self.alpha = background_alpha
+        # A vehicle that rolls slowly through the zone never settles; read it
+        # anyway once it has been present this long.
+        self.moving_read = moving_read_seconds
 
         self.state = IDLE
         self.background = None
         self.previous = None
+        self.present_since = None
         self.last_motion_at = None
         self.clear_since = None
         self.occupied_since = None
@@ -73,6 +78,7 @@ class PresenceTrigger:
         self.attempts = 0
         self.decision_frame = None
         self.frame = None
+        self.fired_while_moving = False
         self.last_scores = (0.0, 0.0)
 
     def update(self, frame, now):
@@ -93,6 +99,11 @@ class PresenceTrigger:
         moving = motion > self.motion_threshold
         present = presence > self.presence_threshold
 
+        if present and self.present_since is None:
+            self.present_since = now
+        elif not present:
+            self.present_since = None
+
         if self.state == IDLE:
             if moving or present:
                 self.state = MOTION
@@ -105,6 +116,11 @@ class PresenceTrigger:
         if self.state == MOTION:
             if moving:
                 self.last_motion_at = now
+                if (self.moving_read and present and self.present_since is not None
+                        and now - self.present_since >= self.moving_read):
+                    # Still moving after all this time: read it now rather than
+                    # wait for a stop that may never come.
+                    return self._fire(now, new_vehicle=True, moving=True)
                 return False
             if now - self.last_motion_at < self.settle:
                 return False
@@ -142,7 +158,7 @@ class PresenceTrigger:
             return self._fire(now, new_vehicle=False)
         return False
 
-    def _fire(self, now, new_vehicle):
+    def _fire(self, now, new_vehicle, moving=False):
         if new_vehicle:
             self.attempts = 0
             self.occupied_since = now
@@ -150,6 +166,7 @@ class PresenceTrigger:
         self.attempts += 1
         self.awaiting_decision = True
         self.clear_since = None
+        self.fired_while_moving = moving
         return True
 
     def decided(self, granted, now):

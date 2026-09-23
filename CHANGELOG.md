@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SPA gate pages: login with role-aware navigation, `/gate` status panel with barrier arm and emergency STOP, `/vehicles` registry with live plate normalisation, `/events` log with frame thumbnails and "open anyway", and for admins `/manage/cameras` (connection test, read-zone picker, change history) and `/manage/gates`
 
 ### Fixed
+- The gate agent no longer misses the plate of an arriving vehicle: the capture loop paces itself instead of sleeping on top of each grab (the same `AGENT_FRAME_INTERVAL` now yields the rate it names), each recognition burst uses the frames kept from before the trigger, and a vehicle that rolls through without stopping is read after `AGENT_MOVING_READ_SECONDS`. `lpr_gate_agent_fps` and `lpr_gate_agent_grab_seconds` show what the camera actually delivers
+- `RtspSource` reads in a background thread and always returns the newest frame; OpenCV buffers decoded frames, so a caller reading slower than the stream was seeing the past
 - The live view keeps one authenticated session per camera instead of renegotiating Digest for every frame, halving the requests an authenticated camera sees, and uses `live_snapshot_path` (sub-stream by vendor preset) so frames are cheaper to encode
 - Plate crops are upscaled to `OCR_CROP_MIN_WIDTH` (default 480px, at most 4x) before the OCR phase, so small plates lose fewer characters to confusion between 2, 3 and 7
 - `TIME_ZONE` defaults to `Asia/Ho_Chi_Minh` and is configurable; the scheduler now uses it, so the nightly purge runs at 03:00 local time instead of 03:00 UTC

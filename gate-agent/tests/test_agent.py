@@ -15,13 +15,15 @@ from gate_agent.agent import Agent, GateWorker, make_controller, send_and_report
 from gate_agent.api import ApiError
 from gate_agent.camera import CameraAuthError, CameraError, EndOfSource
 from gate_agent.config import AgentSettings
+from gate_agent.trigger import PresenceTrigger, prepare
 from gate_agent.controller import ControllerError
 
 
-def frame(car=False):
+def frame(car=False, offset=0):
+    """A grey lane; car=True draws a vehicle, offset moves it (a vehicle in motion)."""
     image = Image.new('RGB', (320, 180), (150, 150, 150))
     if car:
-        ImageDraw.Draw(image).rectangle([60, 40, 260, 170], fill=(40, 40, 40))
+        ImageDraw.Draw(image).rectangle([60 + offset, 40, 260 + offset, 170], fill=(40, 40, 40))
     return image
 
 
@@ -489,3 +491,67 @@ class ApiClientTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FrameRateAndBufferTest(unittest.TestCase):
+    """The loop must keep the frame rate it was asked for, and read the moment the vehicle arrived."""
+
+    def worker(self, frames, **kw):
+        settings_ = settings(**kw)
+        gate = gate_config()
+        return GateWorker(
+            gate, gate['cameras'][0], config(), settings_, mock.Mock(), None,
+            source_factory=lambda camera: FakeSource(frames),
+            clock=Clock(), sleep=lambda s: None,
+        )
+
+    def test_the_burst_uses_the_frames_from_before_the_trigger(self):
+        # Frames the vehicle appears in, then the trigger; the burst must not
+        # start from scratch afterwards.
+        worker = self.worker([frame()] * 4 + [frame(car=True)] * 8)
+        worker.api.decide.return_value = {'decision': 'denied', 'reason': 'no_plate', 'actuate': False,
+                                          'event_id': 1}
+        worker.run()
+        sent = worker.api.decide.call_args.args[1]
+        self.assertEqual(len(sent), config()['burst_frames'])
+
+    def test_prebuffer_keeps_only_the_most_recent_frames(self):
+        worker = self.worker([frame()] * 10, prebuffer_frames=2)
+        worker.run()
+        self.assertEqual(worker.recent.maxlen, 2)
+        self.assertLessEqual(len(worker.recent), 2)
+
+
+class MovingVehicleTest(unittest.TestCase):
+    """A vehicle that rolls through without stopping is still read."""
+
+    def trigger(self, **kw):
+        return PresenceTrigger(motion_threshold=0.01, settle_ms=800, cooldown_s=5, **kw)
+
+    def feed(self, trigger, frames, start=0.0, step=0.4):
+        now = start
+        fired = []
+        for f in frames:
+            if trigger.update(prepare(f), now):
+                fired.append(now)
+            now += step
+        return fired, now
+
+    def test_without_the_setting_a_rolling_vehicle_is_missed(self):
+        t = self.trigger(moving_read_seconds=0)
+        moving = [frame(car=True, offset=i * 15) for i in range(12)]
+        fired, _ = self.feed(t, [frame()] * 3 + moving)
+        self.assertEqual(fired, [])
+
+    def test_a_rolling_vehicle_is_read_after_the_wait(self):
+        t = self.trigger(moving_read_seconds=1.0)
+        moving = [frame(car=True, offset=i * 15) for i in range(12)]
+        fired, _ = self.feed(t, [frame()] * 3 + moving)
+        self.assertTrue(fired, 'a vehicle that never stops should still be read')
+        self.assertTrue(t.fired_while_moving)
+
+    def test_a_vehicle_that_stops_is_still_read_on_the_settle(self):
+        t = self.trigger(moving_read_seconds=5.0)
+        fired, _ = self.feed(t, [frame()] * 3 + [frame(car=True)] * 8)
+        self.assertTrue(fired)
+        self.assertFalse(t.fired_while_moving)

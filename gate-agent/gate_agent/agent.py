@@ -10,13 +10,14 @@ Every failure path ends in "do nothing": the barrier stays where it is and the
 guard's buttons still work.
 """
 
+import collections
 import logging
 import threading
 import time
 
 from . import metrics
 from .api import ApiError
-from .camera import CameraError, EndOfSource, build_source, crop_roi, encode_jpeg
+from .camera import CameraError, EndOfSource, SnapshotSource, build_source, crop_roi, encode_jpeg
 from .controller import ControllerClient, ControllerError
 from .trigger import PresenceTrigger, prepare
 
@@ -62,21 +63,42 @@ class GateWorker(threading.Thread):
             presence_factor=settings.presence_factor,
             max_attempts=settings.max_attempts,
             max_occupied_seconds=settings.max_occupied_seconds,
+            moving_read_seconds=settings.moving_read_seconds,
         )
+        # The frames just before the trigger show the vehicle arriving, which is
+        # often a better view of the plate than anything captured afterwards.
+        self.recent = collections.deque(maxlen=max(1, settings.prebuffer_frames))
 
     # -- camera ---------------------------------------------------------
     def _grab(self):
         if self.source is None:
             self.source = self.source_factory(self.camera)
             logger.info('Gate %s: camera source %s', self.label, self.source.describe())
+            self._warn_about_snapshot_rate()
+        started = self.clock()
         try:
             frame = self.source.grab()
         except CameraError:
             self._close_source()
             raise
+        metrics.GRAB_SECONDS.labels(gate=self.label).observe(max(0.0, self.clock() - started))
         metrics.FRAMES.labels(gate=self.label, result='ok').inc()
         self.camera_status = 'streaming'
         return crop_roi(frame, self.camera.get('roi'))
+
+    def _warn_about_snapshot_rate(self):
+        """Snapshots cost the camera a request per frame; RTSP costs one connection."""
+        interval = self.settings.frame_interval
+        if interval <= 0 or not isinstance(self.source, SnapshotSource):
+            return
+        rate = 1.0 / interval
+        if rate > 2.5:
+            logger.warning(
+                'Gate %s: asking the camera for %.1f snapshots/s. Some cameras refuse above 2/s '
+                '(HTTP 500). If that happens, raise AGENT_FRAME_INTERVAL or turn off '
+                '"prefer snapshots" so the agent reads the RTSP stream instead.',
+                self.label, rate,
+            )
 
     def _close_source(self):
         if self.source is not None:
@@ -88,10 +110,17 @@ class GateWorker(threading.Thread):
     # -- main loop ------------------------------------------------------
     def run(self):
         failures = 0
+        interval = max(0.0, self.settings.frame_interval)
+        next_frame_at = self.clock()
+        measured = _FrameRate()
         while not self.stop_event.is_set():
             try:
                 frame = self._grab()
                 failures = 0
+                self.recent.append(frame)
+                fps = measured.tick(self.clock())
+                if fps is not None:
+                    metrics.FPS.labels(gate=self.label).set(fps)
             except EndOfSource:
                 logger.info('Gate %s: replay finished', self.label)
                 self.finished = True
@@ -106,7 +135,10 @@ class GateWorker(threading.Thread):
                 continue
             if self.trigger.update(prepare(frame), self.clock()):
                 self.handle_trigger(frame)
-            self.sleep(self.settings.frame_interval)
+            # Pace the loop rather than sleeping on top of the grab: a slow
+            # camera would otherwise halve the frame rate that was asked for.
+            next_frame_at = max(next_frame_at + interval, self.clock() - interval)
+            self.sleep(max(0.0, next_frame_at - self.clock()))
         self._close_source()
 
     def stop(self):
@@ -114,8 +146,13 @@ class GateWorker(threading.Thread):
 
     # -- one vehicle ----------------------------------------------------
     def capture_burst(self, first_frame):
-        frames = [first_frame]
-        for _ in range(max(0, self.config.get('burst_frames', 3) - 1)):
+        wanted = max(1, self.config.get('burst_frames', 3))
+        # Newest first: the frames around the trigger, then older ones
+        frames = list(self.recent)[-wanted:] or [first_frame]
+        if first_frame not in frames:
+            frames.append(first_frame)
+        frames = frames[-wanted:]
+        while len(frames) < wanted:
             self.sleep(self.settings.burst_interval)
             try:
                 frames.append(self._grab())
@@ -185,6 +222,28 @@ class GateWorker(threading.Thread):
         except ControllerError as exc:
             metrics.COMMANDS.labels(gate=self.label, command='close', result='failed').inc()
             logger.error('Gate %s: software close failed: %s', self.label, exc)
+
+
+class _FrameRate:
+    """Frames per second over a short window, for the fps gauge."""
+
+    WINDOW = 10
+
+    def __init__(self):
+        self.started = None
+        self.count = 0
+
+    def tick(self, now):
+        if self.started is None:
+            self.started = now
+            return None
+        self.count += 1
+        elapsed = now - self.started
+        if elapsed < self.WINDOW:
+            return None
+        fps = self.count / elapsed
+        self.started, self.count = now, 0
+        return fps
 
 
 def send_and_report(api, controller, label, command, event_id):

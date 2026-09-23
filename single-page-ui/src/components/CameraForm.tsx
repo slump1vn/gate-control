@@ -266,7 +266,8 @@ export default function CameraForm({ camera, presets, onSave, onTest, onCancel, 
 
         <div className="flex flex-wrap gap-6">
           <Checkbox id="camera-prefer-snapshot" label="Prefer snapshots over RTSP" checked={values.prefer_snapshot}
-            onChange={(v) => set('prefer_snapshot', v)} hint="Sharper frames and no video decoding; RTSP is used as a fallback." />
+            onChange={(v) => set('prefer_snapshot', v)}
+            hint="Snapshots are sharp and need no decoding, but cost the camera one request per frame — many refuse above 2/s. Turn this off to read the RTSP stream instead, which costs one connection at any frame rate." />
           <Checkbox id="camera-enabled" label="Enabled" checked={values.is_enabled} onChange={(v) => set('is_enabled', v)} />
         </div>
 
