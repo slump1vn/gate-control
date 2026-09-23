@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-spa-dev: Development launcher for Open LPR backend + Next.js SPA.
+spa-dev: Development launcher for VietinBankSchool LPR backend + Next.js SPA.
 
 Starts both the Django REST API and the Next.js frontend with a
 split-pane terminal UI — API logs on the left, SPA logs on the right.
@@ -291,7 +291,7 @@ def run_tui(stdscr, backend_proc, spa_proc, backend_log, spa_log, lock, start_ti
         stdscr.erase()
         h, w = stdscr.getmaxyx()
 
-        header = f" Open LPR Dev Server  |  API: localhost:{backend_port}  |  SPA: localhost:{spa_port}  |  Started {time.strftime('%H:%M:%S', time.localtime(start_time))} "
+        header = f" VietinBankSchool LPR Dev Server  |  API: localhost:{backend_port}  |  SPA: localhost:{spa_port}  |  Started {time.strftime('%H:%M:%S', time.localtime(start_time))} "
         right = " [k] Kill stale  [q] Quit "
         try:
             stdscr.addstr(0, 0, _truncate(header, w), curses.color_pair(COLOR_HEADER) | curses.A_BOLD)
@@ -329,7 +329,7 @@ def run_tui(stdscr, backend_proc, spa_proc, backend_log, spa_log, lock, start_ti
 def run_plain(backend_proc, spa_proc, backend_log, spa_log, lock, start_time, stop_event, backend_port, spa_port):
     last_be = 0
     last_spa = 0
-    print(f"{ANSI_BOLD} Open LPR Dev Server started {time.strftime('%H:%M:%S', time.localtime(start_time))} {ANSI_RESET}")
+    print(f"{ANSI_BOLD} VietinBankSchool LPR Dev Server started {time.strftime('%H:%M:%S', time.localtime(start_time))} {ANSI_RESET}")
     print(f"{ANSI_DIM} Press Ctrl+C to stop  |  'k' + Enter to kill stale processes{ANSI_RESET}")
     print()
 
@@ -378,7 +378,7 @@ def run_plain(backend_proc, spa_proc, backend_log, spa_log, lock, start_time, st
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Start Open LPR dev servers")
+    parser = argparse.ArgumentParser(description="Start VietinBankSchool LPR dev servers")
     parser.add_argument("--backend-port", type=int, default=8000, help="Django backend port (default: 8000)")
     parser.add_argument("--spa-port", type=int, default=3000, help="Next.js SPA port (default: 3000)")
     parser.add_argument("--no-tui", action="store_true", help="Disable TUI, use plain stdout output")

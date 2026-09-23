@@ -19,7 +19,7 @@ def _should_run_scheduler():
 class LprAppConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'lpr_app'
-    verbose_name = 'License Plate Recognition'
+    verbose_name = 'VietinBankSchool LPR'
 
     def ready(self):
         if not _should_run_scheduler():

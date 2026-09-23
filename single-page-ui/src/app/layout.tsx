@@ -7,7 +7,7 @@ import { AuthProvider } from "@/components/AuthContext";
 import Navbar from "@/components/Navbar";
 
 export const metadata: Metadata = {
-  title: "License Plate Recognition",
+  title: "VietinBankSchool LPR",
   description: "Upload images to detect and recognize license plates using AI",
 };
 
@@ -48,7 +48,7 @@ export default function RootLayout({
 
         <footer className="bg-gray-100 dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-gray-700 mt-12">
           <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-gray-500 dark:text-gray-400">
-            <span>Open LPR &mdash; License Plate Recognition</span>
+            <span>VietinBankSchool LPR</span>
             <div className="flex items-center gap-4">
               <span>
                 Powered by{' '}

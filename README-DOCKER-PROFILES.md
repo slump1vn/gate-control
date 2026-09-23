@@ -1,17 +1,17 @@
 # Docker Compose Profiles Guide
 
-This document explains the different Docker Compose profiles available for deploying OpenLPR.
+This document explains the different Docker Compose profiles available for deploying VietinBankSchool LPR.
 
 ## Overview
 
-OpenLPR uses Docker Compose profiles to allow flexible deployment scenarios. Each profile groups related services together.
+VietinBankSchool LPR uses Docker Compose profiles to allow flexible deployment scenarios. Each profile groups related services together.
 
 ## Available Profiles
 
 ### `core` - Core Application and Monitoring
 
 **Services included:**
-- `lpr-app` - Main OpenLPR Django application
+- `lpr-app` - Main VietinBankSchool LPR Django application
 - `prometheus` - Metrics collection and storage
 - `grafana` - Metrics visualization and dashboards
 - `blackbox-exporter` - HTTP probe for health checking
@@ -29,7 +29,7 @@ docker compose --profile core up -d
 ```
 
 **Access points:**
-- OpenLPR: http://localhost:8000
+- VietinBankSchool LPR: http://localhost:8000
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3000 (default: admin/admin)
 - Blackbox Exporter: http://localhost:9115
@@ -59,7 +59,7 @@ docker compose --profile proxy up -d
 ```
 
 **Access points:**
-- OpenLPR: http://lpr.localhost
+- VietinBankSchool LPR: http://lpr.localhost
 - Prometheus: http://prometheus.localhost
 - Grafana: http://grafana.localhost
 - Blackbox Exporter: http://blackbox.localhost

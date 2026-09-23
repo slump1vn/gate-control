@@ -1,6 +1,6 @@
-# Docker Deployment Guide for Open LPR
+# Docker Deployment Guide for VietinBankSchool LPR
 
-This guide provides comprehensive instructions for deploying the Open LPR application using Docker and Docker Compose.
+This guide provides comprehensive instructions for deploying the VietinBankSchool LPR application using Docker and Docker Compose.
 
 ## Overview
 

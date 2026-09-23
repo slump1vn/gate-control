@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🚗 OPEN LPR - License Plate Recognition System
+# 🚗 VIETINBANKSCHOOL LPR - License Plate Recognition System
 
 [![GitHub release](https://img.shields.io/github/release/faisalthaheem/open-lpr.svg)](https://github.com/faisalthaheem/open-lpr/releases)
 [![GitHub stars](https://img.shields.io/github/stars/faisalthaheem/open-lpr.svg?style=social&label=Star)](https://github.com/faisalthaheem/open-lpr)
@@ -29,7 +29,7 @@
 
 ## 🚀 Live Demo
 
-Try the live demo of Open LPR at: **[https://openlpr.computedsynergy.com/](https://openlpr.computedsynergy.com/)**
+Try the live demo of VietinBankSchool LPR at: **[https://openlpr.computedsynergy.com/](https://openlpr.computedsynergy.com/)**
 
 Experience the license plate recognition system in action without any installation required!
 
@@ -189,7 +189,7 @@ docker compose logs -f
 The main `docker-compose.yml` now uses the **merge design pattern** with profiles for flexible deployment:
 
 **Profiles Available:**
-- **core**: Core infrastructure (Traefik, OpenLPR, Prometheus, Grafana, Blackbox Exporter, Canary)
+- **core**: Core infrastructure (Traefik, VietinBankSchool LPR, Prometheus, Grafana, Blackbox Exporter, Canary)
 - **cpu**: CPU-based LlamaCpp inference
 - **amd-vulkan**: AMD Vulkan GPU inference
 - **nvidia-cuda**: NVIDIA CUDA GPU inference
@@ -213,7 +213,7 @@ docker compose down
 ```
 
 **Access Points:**
-- **OpenLPR App**: http://lpr.localhost
+- **VietinBankSchool LPR App**: http://lpr.localhost
 - **Traefik Dashboard**: http://traefik.localhost
 - **Prometheus**: http://prometheus.localhost
 - **Grafana**: http://grafana.localhost (admin/admin)
@@ -236,7 +236,7 @@ For detailed profile documentation, see [README-DOCKER-PROFILES.md](README-DOCKE
 
 3. **docker-compose.yml** (Legacy external API mode)
    - **Replaced by**: `docker compose --profile core up -d`
-   - **Was**: OpenLPR deployment with external API endpoint
+   - **Was**: VietinBankSchool LPR deployment with external API endpoint
 
 ### Manual Installation
 
@@ -623,7 +623,7 @@ nano .env
 
 After starting the services:
 
-- **OpenLPR Application**: http://lpr.localhost
+- **VietinBankSchool LPR Application**: http://lpr.localhost
 - **Traefik Dashboard**: http://traefik.localhost
 - **Prometheus**: http://prometheus.localhost
 - **Grafana**: http://grafana.localhost (admin/admin)
@@ -1092,7 +1092,7 @@ For specialized deployment scenarios and additional resources:
 
 **[⬆ Back to top](#-open-lpr---license-plate-recognition-system)**
 
-Made with ❤️ by [Open LPR Team](https://github.com/faisalthaheem/open-lpr)
+Made with ❤️ by [VietinBankSchool LPR Team](https://github.com/faisalthaheem/open-lpr)
 
 </div>
 

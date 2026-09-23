@@ -67,7 +67,7 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-8">
             <Link href="/" className="text-xl font-semibold tracking-tight">
-              Open LPR
+              VietinBankSchool LPR
             </Link>
             <div className="hidden md:flex items-center space-x-1">
               {items.map((item) => renderLink(item, false))}

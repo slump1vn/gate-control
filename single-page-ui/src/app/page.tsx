@@ -33,7 +33,7 @@ export default function HomePage() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="text-center mb-8">
         <h1 className="text-4xl font-light bg-gradient-to-r from-[#667eea] to-[#764ba2] bg-clip-text text-transparent">
-          License Plate Recognition
+          VietinBankSchool LPR
         </h1>
         <p className="mt-2 text-gray-600 dark:text-gray-400">Upload an image to detect and recognize license plates</p>
       </div>

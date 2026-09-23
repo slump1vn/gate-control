@@ -1,6 +1,6 @@
 # LlamaCpp and ROCm Resources
 
-This document contains important URLs and resources for deploying OpenLPR with LlamaCpp and ROCm support.
+This document contains important URLs and resources for deploying VietinBankSchool LPR with LlamaCpp and ROCm support.
 
 ## ROCm Docker Deployment
 
@@ -43,12 +43,12 @@ This document contains important URLs and resources for deploying OpenLPR with L
 
 ### Deployment Architecture
 - LlamaCpp server provides OpenAI-compatible API endpoints
-- OpenLPR connects to local LlamaCpp instance instead of cloud APIs
+- VietinBankSchool LPR connects to local LlamaCpp instance instead of cloud APIs
 - Docker Compose orchestrates both services in a unified deployment
 
 ## Additional Resources
 
-For more information about OpenLPR deployment with LlamaCpp:
+For more information about VietinBankSchool LPR deployment with LlamaCpp:
 - [README-llamacpp.md](../README-llamacpp.md) - Comprehensive deployment guide
 - [docker-compose-llamacpp-cpu.yml](../docker-compose-llamacpp-cpu.yml) - CPU-based Docker Compose configuration
 - [docker-compose-llamacpp-amd-vulcan.yml](../docker-compose-llamacpp-amd-vulcan.yml) - AMD Vulkan GPU Docker Compose configuration

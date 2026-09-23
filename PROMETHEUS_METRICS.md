@@ -1,10 +1,10 @@
-# Prometheus Metrics for Open LPR Application
+# Prometheus Metrics for VietinBankSchool LPR Application
 
-This document describes the Prometheus metrics implemented for monitoring the Open LPR (License Plate Recognition) application.
+This document describes the Prometheus metrics implemented for monitoring the VietinBankSchool LPR (License Plate Recognition) application.
 
 ## Overview
 
-The Open LPR application now exposes comprehensive Prometheus metrics at the `/metrics/` endpoint. These metrics provide insights into application performance, business KPIs, system health, and error tracking.
+The VietinBankSchool LPR application now exposes comprehensive Prometheus metrics at the `/metrics/` endpoint. These metrics provide insights into application performance, business KPIs, system health, and error tracking.
 
 ## Available Metrics
 
@@ -280,4 +280,4 @@ For issues or questions about the metrics implementation:
 3. Test with the provided test script
 4. Verify Prometheus configuration
 
-The metrics implementation follows Prometheus best practices and provides comprehensive monitoring coverage for the Open LPR application.
+The metrics implementation follows Prometheus best practices and provides comprehensive monitoring coverage for the VietinBankSchool LPR application.

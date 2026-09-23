@@ -1,6 +1,6 @@
 # Coolify Deployment Guide for Monitoring Stack
 
-This guide explains how to deploy the OpenLPR monitoring stack (Prometheus, Grafana, Blackbox Exporter) on Coolify using custom Docker images with configurations baked in.
+This guide explains how to deploy the VietinBankSchool LPR monitoring stack (Prometheus, Grafana, Blackbox Exporter) on Coolify using custom Docker images with configurations baked in.
 
 ## Overview
 
@@ -30,7 +30,7 @@ The project provides two docker-compose files for different deployment scenarios
 
 Three custom images are available:
 
-- **ghcr.io/faisalthaheem/open-lpr-prometheus**: Prometheus with OpenLPR configuration
+- **ghcr.io/faisalthaheem/open-lpr-prometheus**: Prometheus with VietinBankSchool LPR configuration
 - **ghcr.io/faisalthaheem/open-lpr-grafana**: Grafana with datasource and dashboard provisioning
 - **ghcr.io/faisalthaheem/open-lpr-blackbox**: Blackbox Exporter with HTTP probe configuration
 
@@ -39,7 +39,7 @@ Three custom images are available:
 ### Prerequisites
 
 - Docker installed and running
-- Access to the OpenLPR repository
+- Access to the VietinBankSchool LPR repository
 
 ### Build Process
 
@@ -340,7 +340,7 @@ To manually trigger the workflow, go to Actions tab in GitHub and select "Build 
 
 For issues or questions:
 
-1. Check the main OpenLPR documentation
+1. Check the main VietinBankSchool LPR documentation
 2. Review Coolify documentation for deployment specifics
 3. Check logs in Coolify service console
 4. Verify configurations against this guide

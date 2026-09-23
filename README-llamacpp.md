@@ -1,13 +1,13 @@
-# 🚗 OpenLPR with LlamaCpp - Local Qwen3-VL-4B Inference
+# 🚗 VietinBankSchool LPR with LlamaCpp - Local Qwen3-VL-4B Inference
 
-This guide provides comprehensive instructions for deploying OpenLPR with a local LlamaCpp inference server running Qwen3-VL-4B model for license plate recognition.
+This guide provides comprehensive instructions for deploying VietinBankSchool LPR with a local LlamaCpp inference server running Qwen3-VL-4B model for license plate recognition.
 
 ## 🏗️ Architecture Overview
 
 The solution consists of three main components:
 
 1. **LlamaCpp Service** - Inference server running Qwen3-VL-4B (CPU or GPU)
-2. **OpenLPR Service** - Django web application for license plate recognition
+2. **VietinBankSchool LPR Service** - Django web application for license plate recognition
 3. **Nginx Proxy** - Reverse proxy for production deployment (optional)
 
 The LlamaCpp service can run in two modes:
@@ -39,7 +39,7 @@ graph TB
     
     subgraph "Docker Network: openlpr-network"
         LC[LlamaCpp Container<br/>Port 8001]
-        OL[OpenLPR Container<br/>Port 8000]
+        OL[VietinBankSchool LPR Container<br/>Port 8000]
         NG[Nginx Container<br/>Port 80/443]
         
         LC --> |OpenAI API| OL
@@ -290,7 +290,7 @@ docker-compose -f docker-compose-llamacpp-cpu.yml ps
 # or
 docker-compose -f docker-compose-llamacpp-amd-vulcan.yml ps
 
-# Check OpenLPR health
+# Check VietinBankSchool LPR health
 curl http://localhost:8000/health/
 
 # Check LlamaCpp health
@@ -370,7 +370,7 @@ chmod +x scripts/download-model.sh
 
 #### 3. API Connection Errors
 
-**Problem**: OpenLPR can't connect to LlamaCpp
+**Problem**: VietinBankSchool LPR can't connect to LlamaCpp
 
 **Solution**:
 ```bash
@@ -481,9 +481,9 @@ rm -rf model_files_cache/*
 
 ## 📚 API Usage
 
-### OpenLPR API
+### VietinBankSchool LPR API
 
-The OpenLPR API remains unchanged. See `API_DOCUMENTATION.md` for details.
+The VietinBankSchool LPR API remains unchanged. See `API_DOCUMENTATION.md` for details.
 
 ### LlamaCpp API
 
@@ -547,7 +547,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - [Qwen3-VL](https://huggingface.co/unsloth/Qwen3-VL-4B-Instruct-GGUF) for the vision-language model
 - [LlamaCpp](https://github.com/ggerganov/llama.cpp) for the inference engine
-- [OpenLPR](https://github.com/faisalthaheem/open-lpr) for the license plate recognition system
+- [VietinBankSchool LPR](https://github.com/faisalthaheem/open-lpr) for the license plate recognition system
 - [HuggingFace](https://huggingface.co/) for model hosting
 
 ---

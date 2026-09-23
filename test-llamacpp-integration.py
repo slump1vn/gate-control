@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Test script for OpenLPR + LlamaCpp integration
-Tests the connection between OpenLPR and LlamaCpp services
+Test script for VietinBankSchool LPR + LlamaCpp integration
+Tests the connection between VietinBankSchool LPR and LlamaCpp services
 """
 
 import os
@@ -96,30 +96,30 @@ def test_llamacpp_api():
         return False
 
 def test_openlpr_api():
-    """Test OpenLPR API endpoints"""
+    """Test VietinBankSchool LPR API endpoints"""
     try:
         # Test main endpoint
         response = requests.get(OPENLPR_URL, timeout=API_TIMEOUT)
         if response.status_code == 200:
-            log_success("OpenLPR main endpoint working")
+            log_success("VietinBankSchool LPR main endpoint working")
         else:
-            log_error(f"OpenLPR main endpoint failed: {response.status_code}")
+            log_error(f"VietinBankSchool LPR main endpoint failed: {response.status_code}")
             return False
 
         # Test API health
         response = requests.get(f"{OPENLPR_URL}/health/", timeout=API_TIMEOUT)
         if response.status_code == 200:
             health = response.json()
-            log_success("OpenLPR health endpoint working")
+            log_success("VietinBankSchool LPR health endpoint working")
             log_info(f"API healthy: {health.get('api_healthy', False)}")
         else:
-            log_error(f"OpenLPR health endpoint failed: {response.status_code}")
+            log_error(f"VietinBankSchool LPR health endpoint failed: {response.status_code}")
             return False
 
         return True
         
     except requests.exceptions.RequestException as e:
-        log_error(f"OpenLPR API test failed: {e}")
+        log_error(f"VietinBankSchool LPR API test failed: {e}")
         return False
 
 def create_test_image():
@@ -159,7 +159,7 @@ def create_test_image():
         return None
 
 def test_openlpr_ocr():
-    """Test OpenLPR OCR endpoint"""
+    """Test VietinBankSchool LPR OCR endpoint"""
     try:
         # Try to find a test image
         test_images = [
@@ -191,7 +191,7 @@ def test_openlpr_ocr():
         if response.status_code == 200:
             result = response.json()
             if result.get('success'):
-                log_success("OpenLPR OCR test passed")
+                log_success("VietinBankSchool LPR OCR test passed")
                 detections = result.get('results', {}).get('detections', [])
                 log_info(f"Found {len(detections)} license plate(s)")
                 for detection in detections:
@@ -205,15 +205,15 @@ def test_openlpr_ocr():
                             log_info(f"  - OCR result: {ocr}")
                 return True
             else:
-                log_error(f"OpenLPR OCR failed: {result.get('error', 'Unknown error')}")
+                log_error(f"VietinBankSchool LPR OCR failed: {result.get('error', 'Unknown error')}")
                 return False
         else:
-            log_error(f"OpenLPR OCR request failed: {response.status_code}")
+            log_error(f"VietinBankSchool LPR OCR request failed: {response.status_code}")
             log_error(f"Response: {response.text}")
             return False
             
     except requests.exceptions.RequestException as e:
-        log_error(f"OpenLPR OCR test failed: {e}")
+        log_error(f"VietinBankSchool LPR OCR test failed: {e}")
         return False
 
 def test_docker_services():
@@ -255,16 +255,16 @@ def test_docker_services():
 def main():
     """Main test function"""
     print("=" * 60)
-    print("🧪 OpenLPR + LlamaCpp Integration Test")
+    print("🧪 VietinBankSchool LPR + LlamaCpp Integration Test")
     print("=" * 60)
     
     tests = [
         ("Docker Services", test_docker_services),
         ("LlamaCpp Health", lambda: test_service_health(LLAMACPP_URL, "LlamaCpp")),
-        ("OpenLPR Health", lambda: test_service_health(OPENLPR_URL, "OpenLPR")),
+        ("VietinBankSchool LPR Health", lambda: test_service_health(OPENLPR_URL, "VietinBankSchool LPR")),
         ("LlamaCpp API", test_llamacpp_api),
-        ("OpenLPR API", test_openlpr_api),
-        ("OpenLPR OCR", test_openlpr_ocr),
+        ("VietinBankSchool LPR API", test_openlpr_api),
+        ("VietinBankSchool LPR OCR", test_openlpr_ocr),
     ]
     
     results = []

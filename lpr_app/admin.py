@@ -419,6 +419,6 @@ class GateConfigChangeAdmin(ReadOnlyAdmin):
 
 
 # Customize admin site header and title
-admin.site.site_header = 'License Plate Recognition Admin'
-admin.site.site_title = 'LPR Administration'
-admin.site.index_title = 'LPR Admin Panel'
+admin.site.site_header = 'VietinBankSchool LPR Admin'
+admin.site.site_title = 'VietinBankSchool LPR'
+admin.site.index_title = 'VietinBankSchool LPR administration'

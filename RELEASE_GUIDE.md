@@ -1,4 +1,4 @@
-# Release Guide for Open LPR
+# Release Guide for VietinBankSchool LPR
 
 This document explains the release process and the release notes files.
 

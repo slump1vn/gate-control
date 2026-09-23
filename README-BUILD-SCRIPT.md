@@ -1,10 +1,10 @@
-# Open LPR Docker Build Script
+# VietinBankSchool LPR Docker Build Script
 
-This document provides instructions for using the `build-docker-image.sh` utility script to build Docker images for the Open LPR application.
+This document provides instructions for using the `build-docker-image.sh` utility script to build Docker images for the VietinBankSchool LPR application.
 
 ## Overview
 
-The `build-docker-image.sh` script is a comprehensive utility that automates the Docker image build process for the Open LPR (License Plate Recognition) application. It's based on the GitHub Actions workflow at `.github/workflows/docker-publish.yml` and provides similar functionality for local development and CI/CD pipelines.
+The `build-docker-image.sh` script is a comprehensive utility that automates the Docker image build process for the VietinBankSchool LPR (License Plate Recognition) application. It's based on the GitHub Actions workflow at `.github/workflows/docker-publish.yml` and provides similar functionality for local development and CI/CD pipelines.
 
 ## Features
 
@@ -123,7 +123,7 @@ The script automatically adds OpenContainers labels to the image:
 ### Successful Build
 
 ```bash
-[INFO] Open LPR Docker Build Script
+[INFO] VietinBankSchool LPR Docker Build Script
 [INFO] ============================
 [INFO] Configuration:
 [INFO]   Image Name: open-lpr
@@ -136,7 +136,7 @@ The script automatically adds OpenContainers labels to the image:
 [INFO]   Build Cache: true
 [INFO]   Generate SBOM: false
 
-[INFO] Starting Docker image build for Open LPR application...
+[INFO] Starting Docker image build for VietinBankSchool LPR application...
 ...
 [SUCCESS] Docker image built successfully: ghcr.io/faisalthaheem/open-lpr:latest
 [INFO] Image information:
@@ -227,4 +227,4 @@ When modifying the script:
 
 ## License
 
-This script follows the same license as the Open LPR project (MIT).
+This script follows the same license as the VietinBankSchool LPR project (MIT).
