@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `UPLOAD_FILE_MAX_SIZE` now defaults to 2MB (`2097152`) everywhere: settings.py (was 1MB), `.env` examples (was 1MB) and all Docker Compose files (was 10MB). **Docker deployments that need larger uploads must set `UPLOAD_FILE_MAX_SIZE=10485760` in `.env`.**
 - `FILE_UPLOAD_MAX_MEMORY_SIZE` follows `UPLOAD_FILE_MAX_SIZE`, so accepted uploads are kept in memory instead of spooled to temp files
 - `CORS_ALLOW_CREDENTIALS` is enabled for `CORS_ALLOWED_ORIGINS`, and `CSRF_TRUSTED_ORIGINS` defaults to `CORS_ALLOWED_ORIGINS`
+- The product is named **VietinBankSchool LPR** in the interface, the Django admin and the current documentation. Technical identifiers keep their names: the `openlpr-network` Docker network, container names, image names, the `lpr_*` metrics and every environment variable. Past release notes keep the name each release shipped under
 - All Compose files take their images from `LPR_IMAGE_PREFIX` (default `ghcr.io/slump1vn/gate-control`)
 - `retry_stuck_images` skips gate camera frames; the image list, detail and download endpoints no longer serve them
 

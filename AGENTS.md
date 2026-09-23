@@ -2,6 +2,8 @@
 
 ## Project Overview
 
+The product is called **VietinBankSchool LPR** in everything people read: the SPA, the Django admin and current docs. Technical identifiers are deliberately left alone — the `openlpr-network` network, container and image names, `lpr_*` metrics, environment variables and Python packages. Historical release notes keep the name each release shipped under.
+
 Django 5.2 LTS web app for license plate recognition using Qwen3-VL vision-language model via an OpenAI-compatible API. Python 3.10+, SQLite by default.
 
 ## Commands
