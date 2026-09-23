@@ -100,7 +100,14 @@ export default function LiveCameraView({
       )}
 
       {error && (
-        <div className="absolute inset-x-0 bottom-0 p-2 bg-red-900/80 text-red-100 text-xs">{error}</div>
+        <div className="absolute inset-x-0 bottom-0 p-2 bg-red-900/80 text-red-100 text-xs">
+          {error}
+          {/HTTP 5\d\d|timed out/i.test(error) && (
+            <span className="block text-red-200/80">
+              The camera is refusing snapshots. It also serves the gate agent — try a slower refresh.
+            </span>
+          )}
+        </div>
       )}
 
       {!error && src && (

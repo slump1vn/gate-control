@@ -199,8 +199,10 @@ GATE_AUTO_CLOSE_SECONDS = config('GATE_AUTO_CLOSE_SECONDS', default=10, cast=int
 GATE_HEARTBEAT_TIMEOUT_SECONDS = config('GATE_HEARTBEAT_TIMEOUT_SECONDS', default=30, cast=int)
 GATE_AGENT_TOKEN = config('GATE_AGENT_TOKEN', default='')
 GATE_CONFIG_ENCRYPTION_KEY = config('GATE_CONFIG_ENCRYPTION_KEY', default='')
-# Live-view frames are reused for this long, so viewers cannot hammer the camera
-GATE_SNAPSHOT_CACHE_SECONDS = config('GATE_SNAPSHOT_CACHE_SECONDS', default=0.5, cast=float)
+# The live view never hits the camera more often than this, however fast viewers
+# refresh and however many of them there are. Cameras also serve the gate agent,
+# and some answer HTTP 500 when snapshots are requested too quickly.
+GATE_SNAPSHOT_CACHE_SECONDS = config('GATE_SNAPSHOT_CACHE_SECONDS', default=1.0, cast=float)
 
 GATE_CAMERA_ALLOWED_CIDRS = config(
     'GATE_CAMERA_ALLOWED_CIDRS',

@@ -104,7 +104,7 @@ Barrier control from plate recognition (see `openspec/changes/2026-09-22-anpr-ga
 - `GATE_AGENT_TOKEN` — Bearer token for the gate agent's endpoints; empty rejects all agent calls (default: empty)
 - `GATE_CONFIG_ENCRYPTION_KEY` — Fernet key encrypting camera passwords and controller tokens at rest; back it up (default: empty — secrets cannot be saved). Generate both secrets with `python manage.py generate_gate_secrets`
 - `GATE_CAMERA_ALLOWED_CIDRS` — Networks camera hosts must resolve into, checked on save and before the connection test connects (default: `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`)
-- `GATE_SNAPSHOT_CACHE_SECONDS` — A live-view frame is reused for this long, so several viewers or a fast refresh interval cannot hammer the camera (default: `0.5`)
+- `GATE_SNAPSHOT_CACHE_SECONDS` — Minimum interval between live-view requests to a camera; frames and failures in between are served from cache (default: `1.0`). Cameras also serve the gate agent, and some answer HTTP 500 when snapshots are requested faster
 - `GATE_BURST_FRAMES` — Max frames per decision request (default: `3`)
 - `GATE_CONSENSUS_MIN` — Frames that must agree on a plate before it can be granted (default: `2`)
 - `GATE_MIN_CONFIDENCE` — Minimum OCR confidence among the agreeing frames (default: `0.80`)

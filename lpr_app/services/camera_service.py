@@ -207,7 +207,9 @@ def live_snapshot(camera):
     key = f'camera-snapshot:{camera.pk}'
     cached = cache.get(key)
     if cached is not None:
-        return cached, ''
+        # A cached failure is held for the same interval, so a camera that is
+        # struggling is not asked again on every refresh.
+        return (None, cached['error']) if cached.get('error') else (cached['image'], '')
 
     try:
         ip = resolve_allowed_host(camera.host)
@@ -219,12 +221,13 @@ def live_snapshot(camera):
     except Exception as exc:
         return None, f'Stored password cannot be read: {exc}'
 
+    ttl = max(0.05, settings.GATE_SNAPSHOT_CACHE_SECONDS)
     step, image = _fetch_snapshot(camera, ip, password)
     if image is None:
+        cache.set(key, {'error': step.message}, ttl)
         return None, step.message
 
-    ttl = max(0.05, settings.GATE_SNAPSHOT_CACHE_SECONDS)
-    cache.set(key, image, ttl)
+    cache.set(key, {'image': image}, ttl)
     return image, ''
 
 

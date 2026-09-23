@@ -17,8 +17,10 @@ import { Alert, Badge, PageHeader, cardClass, formatDateTime, inputClass } from 
 const STATUS_POLL_MS = 2000;
 const EVENT_POLL_MS = 3000;
 
+// The camera also serves the gate agent. Asking it for snapshots faster than
+// once a second makes some models answer HTTP 500, so that is the ceiling here;
+// the service caches frames and will not hit the camera more often anyway.
 const INTERVALS = [
-  { label: '2 frames/s', value: 500 },
   { label: '1 frame/s', value: 1000 },
   { label: '1 frame / 2s', value: 2000 },
   { label: '1 frame / 5s', value: 5000 },

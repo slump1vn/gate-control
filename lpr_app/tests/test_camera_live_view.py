@@ -66,11 +66,24 @@ class CameraSnapshotEndpointTest(TestCase):
         self.assertEqual(response.json()['error_code'], 'SNAPSHOT_FAILED')
         self.assertIn('Authentication failed', response.json()['error'])
 
-    def test_failures_are_not_cached(self):
+    def test_a_failing_camera_is_not_asked_again_within_the_interval(self):
+        # Some cameras answer HTTP 500 when snapshots are requested too quickly;
+        # retrying on every refresh would keep them there.
         self.client.force_login(self.operator)
-        step = camera_service.TestStep('snapshot', False, 'timeout')
+        step = camera_service.TestStep('snapshot', False, 'Camera returned HTTP 500')
+        with patch.object(camera_service, '_fetch_snapshot', return_value=(step, None)) as fetch:
+            for _ in range(5):
+                response = self.client.get(self.url())
+                self.assertEqual(response.status_code, 503)
+                self.assertIn('HTTP 500', response.json()['error'])
+        self.assertEqual(fetch.call_count, 1)
+
+    def test_the_camera_recovers_once_the_cached_failure_expires(self):
+        self.client.force_login(self.operator)
+        step = camera_service.TestStep('snapshot', False, 'Camera returned HTTP 500')
         with patch.object(camera_service, '_fetch_snapshot', return_value=(step, None)):
-            self.client.get(self.url())
+            self.assertEqual(self.client.get(self.url()).status_code, 503)
+        cache.clear()
         with patch.object(camera_service, '_fetch_snapshot',
                           return_value=(camera_service.TestStep('snapshot', True, 'ok'), JPEG)) as fetch:
             self.assertEqual(self.client.get(self.url()).status_code, 200)
