@@ -10,6 +10,8 @@ interface RoiPickerProps {
   onChange: (roi: Roi | null) => void;
   /** When false the zone is shown but cannot be redrawn. */
   editing?: boolean;
+  /** Told while a rectangle is being dragged, so a live image can hold still. */
+  onDraggingChange?: (dragging: boolean) => void;
 }
 
 const MIN_SIZE = 0.03;
@@ -21,7 +23,7 @@ const round = (v: number) => Math.round(v * 1000) / 1000;
  * Drag a rectangle on the camera image to set the read zone. Coordinates are
  * fractions of the frame (0–1), independent of the stream resolution.
  */
-export default function RoiPicker({ image, roi, onChange, editing = true }: RoiPickerProps) {
+export default function RoiPicker({ image, roi, onChange, editing = true, onDraggingChange }: RoiPickerProps) {
   const box = useRef<HTMLDivElement>(null);
   const [start, setStart] = useState<{ x: number; y: number } | null>(null);
   const [draft, setDraft] = useState<Roi | null>(null);
@@ -44,6 +46,7 @@ export default function RoiPicker({ image, roi, onChange, editing = true }: RoiP
     const p = point(e);
     setStart(p);
     setDraft({ x: p.x, y: p.y, w: 0, h: 0 });
+    onDraggingChange?.(true);
   };
 
   const onMove = (e: PointerEvent) => {
@@ -55,6 +58,7 @@ export default function RoiPicker({ image, roi, onChange, editing = true }: RoiP
     const next = rect(start, point(e));
     setStart(null);
     setDraft(null);
+    onDraggingChange?.(false);
     // A click or a sliver is not a zone: keep the previous one.
     if (next.w >= MIN_SIZE && next.h >= MIN_SIZE) onChange(next);
   };
@@ -69,7 +73,7 @@ export default function RoiPicker({ image, roi, onChange, editing = true }: RoiP
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
-        onPointerCancel={() => { setStart(null); setDraft(null); }}
+        onPointerCancel={() => { setStart(null); setDraft(null); onDraggingChange?.(false); }}
         role={editing ? 'application' : undefined}
         aria-label={editing ? 'Drag on the image to set the read zone' : 'Camera snapshot with read zone'}
       >

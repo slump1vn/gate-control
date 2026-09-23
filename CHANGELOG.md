@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- The read zone can be drawn on the camera's live view, not only on a still from the connection test, so a zone can be aimed while a vehicle drives in
 - The agent reports what its trigger sees (state, frame rate, motion and presence against their thresholds), shown under each live view on `/monitor` and on the camera page, and exported as `lpr_gate_agent_motion` / `lpr_gate_agent_presence`. When a vehicle arrives and no event appears, this says whether it was noticed at all
 - A gate is watched by several cameras, each assigned a direction (`GateCamera`): normally one for vehicles arriving and one for those leaving, with a warning while fewer are assigned. Access events record which camera read the vehicle and which way it was going, and the event log can be filtered by direction
 - `GateDevice.exit_policy`: a camera watching the exit either applies the registry (default) or opens for every vehicle while still logging its plate

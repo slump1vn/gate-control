@@ -1,7 +1,7 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
-import { ApiError } from '@/lib/gate-api';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { ApiError, cameraSnapshotPath } from '@/lib/gate-api';
 import type { Camera, CameraInput, CameraPresets, CameraTestResult as TestResult, Vendor } from '@/lib/gate-api';
 import CameraTestResult from './CameraTestResult';
 import RoiPicker from './RoiPicker';
@@ -23,6 +23,8 @@ interface CameraFormProps {
   initialTest?: CameraTestState;
   /** Start with the read-zone editor open (Storybook). */
   initialRoiEditing?: boolean;
+  /** A saved camera can be aimed against its live view instead of a still. */
+  apiBase?: string;
 }
 
 type Values = Omit<CameraInput, 'password'>;
@@ -48,6 +50,8 @@ const DEFAULTS: Values = {
 };
 
 const PATH_FIELDS = ['main_stream_path', 'sub_stream_path', 'snapshot_path', 'live_snapshot_path'] as const;
+
+const LIVE_REFRESH_MS = 1000;
 
 const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const HOSTNAME = /^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$/;
@@ -85,7 +89,10 @@ function clientErrors(v: Values, raw: Record<NumberField, string>): Record<strin
   return errors;
 }
 
-export default function CameraForm({ camera, presets, onSave, onTest, onCancel, initialTest = { state: 'idle' }, initialRoiEditing = false }: CameraFormProps) {
+export default function CameraForm({
+  camera, presets, onSave, onTest, onCancel,
+  initialTest = { state: 'idle' }, initialRoiEditing = false, apiBase,
+}: CameraFormProps) {
   const initial = useMemo(() => toValues(camera, presets), [camera, presets]);
   const [values, setValues] = useState<Values>(initial);
   // Number inputs are kept as typed, so a half-typed value is not coerced.
@@ -104,6 +111,20 @@ export default function CameraForm({ camera, presets, onSave, onTest, onCancel, 
   const [test, setTest] = useState<CameraTestState>(initialTest);
   const [roiEditing, setRoiEditing] = useState(initialRoiEditing);
   const [advanced, setAdvanced] = useState(false);
+  // Aiming a read zone is much easier against a moving picture: a vehicle can
+  // drive in while the zone is drawn around where it comes to a stop.
+  const [live, setLive] = useState(false);
+  const [liveSrc, setLiveSrc] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const canGoLive = !!camera && apiBase !== undefined;
+
+  useEffect(() => {
+    if (!live || !camera || dragging) return;
+    const tick = () => setLiveSrc(`${apiBase ?? ''}${cameraSnapshotPath(camera.id)}?t=${Date.now()}`);
+    tick();
+    const timer = setInterval(tick, LIVE_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [live, camera, apiBase, dragging]);
 
   const current: Values = {
     ...values,
@@ -115,7 +136,8 @@ export default function CameraForm({ camera, presets, onSave, onTest, onCancel, 
   };
   const errors = clientErrors(values, raw);
   const dirty = JSON.stringify(current) !== JSON.stringify(initial) || password !== '';
-  const snapshot = test.state === 'done' ? test.result.image : null;
+  const testSnapshot = test.state === 'done' ? test.result.image : null;
+  const snapshot = live && liveSrc ? liveSrc : testSnapshot;
 
   // Editing a field clears the server's complaint about it and the summary above the form.
   const clearError = (key: string) => {
@@ -306,8 +328,14 @@ export default function CameraForm({ camera, presets, onSave, onTest, onCancel, 
       </div>
 
       <div className={`${cardClass} p-5 space-y-4`}>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">Preview and read zone</h2>
+          {canGoLive && (
+            <button type="button" onClick={() => setLive(!live)}
+              className="text-sm text-purple-600 dark:text-purple-400 hover:underline">
+              {live ? 'Use the test snapshot' : 'Use the live view'}
+            </button>
+          )}
           {snapshot && (
             <button type="button" className="text-sm text-purple-600 dark:text-purple-400 hover:underline" onClick={() => setRoiEditing(!roiEditing)}>
               {roiEditing ? 'Done' : 'Edit read zone'}
@@ -317,7 +345,7 @@ export default function CameraForm({ camera, presets, onSave, onTest, onCancel, 
 
         {test.state === 'idle' && (
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Run <strong>Test connection</strong> to check the camera and get a snapshot. The read zone is drawn on that snapshot.
+            Run <strong>Test connection</strong> to check the camera and get a snapshot{canGoLive ? ', or switch to the live view' : ''}. The read zone is drawn on it.
           </p>
         )}
         {test.state === 'testing' && (
@@ -334,10 +362,13 @@ export default function CameraForm({ camera, presets, onSave, onTest, onCancel, 
 
         {snapshot ? (
           <>
-            <RoiPicker image={snapshot} roi={values.roi} onChange={(roi) => set('roi', roi)} editing={roiEditing} />
+            <RoiPicker image={snapshot} roi={values.roi} onChange={(roi) => set('roi', roi)}
+              editing={roiEditing} onDraggingChange={setDragging} />
             {roiEditing && (
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Drag a rectangle around the spot where the plate is when a vehicle stops at the barrier. Save the camera to apply it.
+                Drag a rectangle around the spot where the plate is when a vehicle stops at the barrier — not the whole
+                yard. A zone that covers other lanes, pedestrians or parked vehicles never reads as empty, and an
+                arriving vehicle is then taken for the one already there. Save the camera to apply it.
               </p>
             )}
           </>

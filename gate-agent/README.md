@@ -92,6 +92,12 @@ Presence  ▓▓▓▓▓▓▓  0.184 / 0.060
   fills too little of the read zone. Shrink the zone to the part of the lane the
   vehicle occupies, or lower `motion_threshold` on the camera (presence is
   `motion_threshold × AGENT_PRESENCE_FACTOR`, at least 0.04).
+- **Only some vehicles are read, and always the same kind** — the read zone
+  covers more than one lane. Presence is measured over the whole zone, so
+  anything standing in it (a vehicle leaving, a parked motorbike, someone
+  waiting) keeps it occupied, and the next vehicle to arrive is taken for the
+  one already there rather than read. A zone should cover where one vehicle
+  stops, nothing more. Draw it on the live view on the camera page.
 - **It says "Lane empty" with a vehicle in front of the camera** — the agent is
   reading a different camera or a stale frame. Check the live view actually moves.
 - **Nothing is reported at all** — the agent is not running, or not watching this

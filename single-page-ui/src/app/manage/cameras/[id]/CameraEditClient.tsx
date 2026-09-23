@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { getApiBase } from '@/lib/api';
 import {
   createCamera, deleteCamera, getCamera, getCameraPresets, getConfigChanges, testCamera, updateCamera,
 } from '@/lib/gate-api';
@@ -22,6 +23,7 @@ function CameraEditContent() {
   const isNew = params.id === 'new';
   const id = isNew ? null : Number(params.id);
 
+  const [apiBase, setApiBase] = useState('');
   const [presets, setPresets] = useState<CameraPresets | null>(null);
   const [camera, setCamera] = useState<Camera | null>(null);
   const [status, setStatus] = useState<Pick<Camera, 'agent_status' | 'agent_status_at' | 'agent_trigger' | 'last_test_at' | 'last_test_ok' | 'last_test_error'> | null>(null);
@@ -36,6 +38,7 @@ function CameraEditContent() {
   }, []);
 
   useEffect(() => {
+    getApiBase().then(setApiBase);
     getCameraPresets().then(setPresets).catch((err) => setError(err.message));
     if (id !== null) {
       getCamera(id).then((c) => { setCamera(c); setStatus(c); }).catch((err) => setError(err.message));
@@ -118,7 +121,7 @@ function CameraEditContent() {
       )}
 
       <CameraForm key={camera?.id ?? 'new'} camera={camera} presets={presets} onSave={save} onTest={testCamera}
-        onCancel={() => router.push('/manage/cameras')} />
+        apiBase={apiBase} onCancel={() => router.push('/manage/cameras')} />
 
       {camera && (
         <section className={`${cardClass} p-5 mt-6`}>
