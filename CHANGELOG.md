@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SPA gate pages: login with role-aware navigation, `/gate` status panel with barrier arm and emergency STOP, `/vehicles` registry with live plate normalisation, `/events` log with frame thumbnails and "open anyway", and for admins `/manage/cameras` (connection test, read-zone picker, change history) and `/manage/gates`
 
 ### Fixed
+- RTSP streams are opened over TCP with a socket timeout, so a stalled stream is noticed in seconds instead of FFmpeg's 30
 - A worker that hit an unexpected error stopped watching its lane silently, while the agent still reported the camera as streaming. Unexpected errors are now logged and retried with the same backoff as a camera failure, and a worker that stops for any other reason is started again at the next config sync
 - The gate agent no longer misses the plate of an arriving vehicle: the capture loop paces itself instead of sleeping on top of each grab (the same `AGENT_FRAME_INTERVAL` now yields the rate it names), each recognition burst uses the frames kept from before the trigger, and a vehicle that rolls through without stopping is read after `AGENT_MOVING_READ_SECONDS`. `lpr_gate_agent_fps` and `lpr_gate_agent_grab_seconds` show what the camera actually delivers
 - `RtspSource` reads in a background thread and always returns the newest frame; OpenCV buffers decoded frames, so a caller reading slower than the stream was seeing the past

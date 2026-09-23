@@ -102,9 +102,14 @@ class RtspSource:
 
     START_TIMEOUT = 10.0
 
-    def __init__(self, url, frame_timeout=5.0):
+    def __init__(self, url, frame_timeout=5.0, transport=None, socket_timeout=None):
         self.url = url
         self.frame_timeout = frame_timeout
+        # Default to TCP: over UDP a lost packet stalls the stream, and FFmpeg
+        # then sits on its own 30s timeout before anyone notices.
+        self.transport = transport or os.getenv('AGENT_RTSP_TRANSPORT', 'tcp')
+        self.socket_timeout = float(socket_timeout if socket_timeout is not None
+                                    else os.getenv('AGENT_RTSP_TIMEOUT_SECONDS', 5.0))
         self.capture = None
         self.cv2 = None
         self.thread = None
@@ -122,7 +127,12 @@ class RtspSource:
         except ImportError:
             raise CameraError('RTSP needs opencv-python-headless, which is not installed')
         self.cv2 = cv2
-        capture = cv2.VideoCapture(self.url)
+        # FFmpeg reads these when the capture is opened, not before or after.
+        micros = int(max(1.0, self.socket_timeout) * 1_000_000)
+        os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = (
+            f'rtsp_transport;{self.transport}|stimeout;{micros}|timeout;{micros}|max_delay;500000'
+        )
+        capture = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
         if not capture.isOpened():
             raise CameraError('Cannot open RTSP stream')
         try:

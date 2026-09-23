@@ -28,6 +28,9 @@ class AgentSettings:
     # A vehicle that never stops is read anyway after this long in the zone
     # (0 disables, and only vehicles that come to a stop are read).
     moving_read_seconds: float = 2.0
+    # RTSP transport and socket timeout, read by RtspSource from the environment
+    rtsp_transport: str = 'tcp'
+    rtsp_timeout_seconds: float = 5.0
     presence_factor: float = 3.0
     max_attempts: int = 2
     max_occupied_seconds: float = 300.0
@@ -47,6 +50,8 @@ class AgentSettings:
             burst_interval=_float('AGENT_BURST_INTERVAL', cls.burst_interval),
             prebuffer_frames=_int('AGENT_PREBUFFER_FRAMES', cls.prebuffer_frames),
             moving_read_seconds=_float('AGENT_MOVING_READ_SECONDS', cls.moving_read_seconds),
+            rtsp_transport=os.getenv('AGENT_RTSP_TRANSPORT', cls.rtsp_transport),
+            rtsp_timeout_seconds=_float('AGENT_RTSP_TIMEOUT_SECONDS', cls.rtsp_timeout_seconds),
             presence_factor=_float('AGENT_PRESENCE_FACTOR', cls.presence_factor),
             max_attempts=_int('AGENT_MAX_ATTEMPTS', cls.max_attempts),
             max_occupied_seconds=_float('AGENT_MAX_OCCUPIED_SECONDS', cls.max_occupied_seconds),

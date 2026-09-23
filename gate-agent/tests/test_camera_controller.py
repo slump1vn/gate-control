@@ -302,3 +302,36 @@ class ControllerTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class RtspOptionsTest(unittest.TestCase):
+    """RTSP over UDP stalls on a lost packet; FFmpeg then waits 30s before failing."""
+
+    def test_tcp_and_a_socket_timeout_are_set_before_opening(self):
+        cv2 = mock.Mock()
+        capture = cv2.VideoCapture.return_value
+        capture.isOpened.return_value = True
+        capture.read.return_value = (False, None)
+        seen = {}
+
+        def remember(url, backend=None):
+            seen['options'] = os.environ.get('OPENCV_FFMPEG_CAPTURE_OPTIONS')
+            seen['url'] = url
+            return capture
+
+        cv2.VideoCapture.side_effect = remember
+        with mock.patch.dict('sys.modules', {'cv2': cv2}):
+            source = RtspSource('rtsp://x/', socket_timeout=3)
+            with self.assertRaises(CameraError):
+                source.grab()
+        self.assertIn('rtsp_transport;tcp', seen['options'])
+        self.assertIn('stimeout;3000000', seen['options'])
+        self.assertEqual(seen['url'], 'rtsp://x/')
+
+    def test_transport_can_be_changed(self):
+        cv2 = mock.Mock()
+        cv2.VideoCapture.return_value.isOpened.return_value = False
+        with mock.patch.dict('sys.modules', {'cv2': cv2}):
+            with self.assertRaises(CameraError):
+                RtspSource('rtsp://x/', transport='udp').grab()
+        self.assertIn('rtsp_transport;udp', os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'])

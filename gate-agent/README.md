@@ -33,6 +33,8 @@ python -m gate_agent replay --gate 1 ./recorded-frames      # recorded frames th
 | `AGENT_FRAME_INTERVAL` | `0.2` | Seconds between frames for the presence trigger (the loop paces itself, so this is the real rate) |
 | `AGENT_PREBUFFER_FRAMES` | `3` | Frames kept from before the trigger, used as the recognition burst |
 | `AGENT_MOVING_READ_SECONDS` | `2.0` | Read a vehicle that never stops after this long in the zone (`0` waits for a stop) |
+| `AGENT_RTSP_TRANSPORT` | `tcp` | RTSP transport. Over UDP a lost packet stalls the stream |
+| `AGENT_RTSP_TIMEOUT_SECONDS` | `5` | Socket timeout for RTSP; without it FFmpeg waits 30s before reporting a stalled stream |
 | `AGENT_BURST_INTERVAL` | `0.4` | Seconds between frames in a recognition burst |
 | `AGENT_PRESENCE_FACTOR` | `3.0` | Presence threshold = max(camera motion threshold × factor, 0.04) |
 | `AGENT_MAX_ATTEMPTS` | `2` | Reads per vehicle when the first one is denied |
