@@ -1,6 +1,6 @@
 import io
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from unittest.mock import patch
 
 from django.test import TestCase, Client, override_settings
@@ -90,7 +90,8 @@ class APIImageListResponseTest(TestCase):
             original_image=_make_image_file(),
             filename="ts.jpg",
             processing_status="completed",
-            processing_timestamp=datetime(2026, 1, 15, 10, 30, 0),
+            # Aware, so the assertion below does not depend on settings.TIME_ZONE
+            processing_timestamp=datetime(2026, 1, 15, 10, 30, 0, tzinfo=dt_timezone.utc),
         )
         response = self.client.get("/api/v1/images/")
         result = response.json()["results"][0]

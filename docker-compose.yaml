@@ -23,7 +23,7 @@ services:
   lpr-app:
     env_file:
       - .env.llamacpp
-    image: ghcr.io/faisalthaheem/open-lpr:latest
+    image: ${LPR_IMAGE_PREFIX:-ghcr.io/slump1vn/gate-control}:latest
     container_name: lpr-app
     volumes:
       # SQLite database persistence
@@ -40,6 +40,7 @@ services:
       # Django Settings
       - SECRET_KEY=${SECRET_KEY:-django-insecure-change-me-in-production}
       - DEBUG=${DEBUG:-False}
+      - TIME_ZONE=${TIME_ZONE:-Asia/Ho_Chi_Minh}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,lpr-app}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
       - CORS_ALLOW_PRIVATE_NETWORK=${CORS_ALLOW_PRIVATE_NETWORK:-False}
@@ -112,12 +113,12 @@ services:
       retries: 3
       start_period: 40s
     entrypoint: ["./docker-entrypoint.sh"]
-    command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "120", "lpr_project.wsgi:application"]
+    command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "8", "--timeout", "120", "lpr_project.wsgi:application"]
     profiles:
       - core
 
   spa:
-    image: ghcr.io/faisalthaheem/open-lpr-spa:latest
+    image: ${LPR_IMAGE_PREFIX:-ghcr.io/slump1vn/gate-control}-spa:latest
     container_name: spa
     environment:
       - BACKEND_API_URL=${BACKEND_API_URL:-http://lpr-app:8000}
@@ -138,7 +139,7 @@ services:
 
   prometheus:
     # Use custom image with config baked in
-    image: ghcr.io/faisalthaheem/open-lpr-prometheus:latest
+    image: ${LPR_IMAGE_PREFIX:-ghcr.io/slump1vn/gate-control}-prometheus:latest
     container_name: prometheus
     # Port is configurable via environment variable
     ports:
@@ -160,11 +161,11 @@ services:
 
   grafana:
     # Use custom image with provisioning baked in
-    image: ghcr.io/faisalthaheem/open-lpr-grafana:latest
+    image: ${LPR_IMAGE_PREFIX:-ghcr.io/slump1vn/gate-control}-grafana:latest
     container_name: grafana
     # Port is configurable via environment variable
     ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+      - "${GRAFANA_PORT:-3001}:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
@@ -186,7 +187,7 @@ services:
 
   blackbox-exporter:
     # Use custom image with config baked in
-    image: ghcr.io/faisalthaheem/open-lpr-blackbox:latest
+    image: ${LPR_IMAGE_PREFIX:-ghcr.io/slump1vn/gate-control}-blackbox:latest
     container_name: blackbox-exporter
     # Port is configurable via environment variable
     ports:
@@ -206,7 +207,7 @@ services:
   lpr-canary:
     env_file:
       - .env.llamacpp
-    image: ghcr.io/faisalthaheem/open-lpr-canary:latest
+    image: ${LPR_IMAGE_PREFIX:-ghcr.io/slump1vn/gate-control}-canary:latest
     container_name: lpr-canary
     # Port is configurable via environment variable
     ports:
@@ -232,7 +233,7 @@ services:
   # Gate automation: watches the gate camera, requests decisions, relays
   # barrier commands. Needs GATE_AGENT_TOKEN (same value as lpr-app).
   gate-agent:
-    image: ghcr.io/faisalthaheem/open-lpr-gate-agent:latest
+    image: ${LPR_IMAGE_PREFIX:-ghcr.io/slump1vn/gate-control}-gate-agent:latest
     container_name: gate-agent
     environment:
       - LPR_API_URL=${LPR_API_URL:-http://lpr-app:8000}

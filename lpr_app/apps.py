@@ -31,7 +31,9 @@ class LprAppConfig(AppConfig):
             from apscheduler.triggers.interval import IntervalTrigger
             from django_apscheduler.jobstores import DjangoJobStore
 
-            scheduler = BackgroundScheduler()
+            # Without an explicit timezone APScheduler uses the container's clock (UTC),
+            # so a 03:00 job would not run at 03:00 local time.
+            scheduler = BackgroundScheduler(timezone=settings.TIME_ZONE)
             scheduler.add_jobstore(DjangoJobStore(), 'default')
 
             scheduler.add_job(

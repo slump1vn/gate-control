@@ -63,10 +63,12 @@ docker compose --profile core up -d                        # External API only
 docker compose --profile core --profile cpu --profile gate up -d  # + gate camera agent
 ```
 
-- Images published to `ghcr.io/faisalthaheem/open-lpr`
+- Images published to `ghcr.io/slump1vn/gate-control` (app), `-spa`, `-gate-agent`, `-canary`, `-prometheus`, `-grafana`, `-blackbox`. Compose reads `LPR_IMAGE_PREFIX` (default `ghcr.io/slump1vn/gate-control`), so a different registry or owner needs no file edit
 - **All Docker images are built and published by GitHub Actions CI.** Docker Compose files (`docker-compose.yaml`) only reference pre-built images from GHCR — never use `build:` directives in compose files.
 - CI: `.github/workflows/docker-publish.yml` builds multi-arch (amd64/arm64) on push to main and version tags
 - Container runs as `django` user via `gosu` (see `docker-entrypoint.sh`)
+- `lpr-app` runs one gunicorn process with 8 threads: one process keeps a single APScheduler instance, and the threads keep a slow gate decision (up to `GATE_DECIDE_TIMEOUT`) from blocking every other request, including a manual STOP
+- Grafana publishes on `GRAFANA_PORT` (default `3001`) because the SPA uses 3000
 - `docker-entrypoint.sh` runs migrate + collectstatic + optional createsuperuser on every start
 - `fonts-noto` and `fonts-noto-cjk` are installed in the Docker image for Unicode text rendering (Arabic, CJK, etc.) on bounding box visualizations
 
@@ -82,6 +84,8 @@ Key variables (see `.env.example` and `.env.llamacpp.example` for full list):
 - `RATE_LIMIT_RATE` — Throttle rate in `num/period` format, e.g. `2/min` (default: `2/min`)
 - `RATE_LIMIT_EXCLUDE_PATHS` — Comma-separated URL paths excluded from rate limiting (default: `/health/,/api/v1/health-light/`)
 - `RATE_LIMIT_INCLUDE_PATHS` — Comma-separated URL paths to rate limit; all other paths are exempt (default: `/api/v1/ocr/`)
+- `TIME_ZONE` — Server timezone for Django admin timestamps and the nightly purge job (default: `Asia/Ho_Chi_Minh`). The SPA shows times in the viewer's own timezone
+- `LPR_IMAGE_PREFIX` — Image prefix used by all Compose files (default: `ghcr.io/slump1vn/gate-control`)
 - `DATABASE_PATH` — SQLite path (default: project root `db.sqlite3`)
 - `MEDIA_PATH` — Media storage (default: `./media`, Docker: `./container-media`)
 - `UPLOAD_FILE_MAX_SIZE` — Maximum size per uploaded file in bytes (default: `2097152` = 2MB, same in settings.py, env examples and Docker compose). Also sets `FILE_UPLOAD_MAX_MEMORY_SIZE` so accepted uploads stay in memory

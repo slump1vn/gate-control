@@ -53,7 +53,7 @@ services:
   lpr-app:
     env_file:
       - .env.llamacpp
-    image: ghcr.io/faisalthaheem/open-lpr:latest
+    image: ${LPR_IMAGE_PREFIX:-ghcr.io/slump1vn/gate-control}:latest
     container_name: open-lpr-app
     ports:
       - "8000:8000"

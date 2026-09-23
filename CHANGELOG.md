@@ -15,12 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SPA gate pages: login with role-aware navigation, `/gate` status panel with barrier arm and emergency STOP, `/vehicles` registry with live plate normalisation, `/events` log with frame thumbnails and "open anyway", and for admins `/manage/cameras` (connection test, read-zone picker, change history) and `/manage/gates`
 
 ### Fixed
+- `TIME_ZONE` defaults to `Asia/Ho_Chi_Minh` and is configurable; the scheduler now uses it, so the nightly purge runs at 03:00 local time instead of 03:00 UTC
+- `lpr-app` serves requests with 8 gunicorn threads, so a gate decision no longer blocks other requests, including manual STOP
+- Grafana's default published port moved to 3001, which the SPA was already using
 - Static files are served by WhiteNoise, so the Django admin is styled when `DEBUG=False` (previously the admin, including the gate "Test recognition" page, loaded without CSS or JavaScript in production)
 
 ### Changed
 - `UPLOAD_FILE_MAX_SIZE` now defaults to 2MB (`2097152`) everywhere: settings.py (was 1MB), `.env` examples (was 1MB) and all Docker Compose files (was 10MB). **Docker deployments that need larger uploads must set `UPLOAD_FILE_MAX_SIZE=10485760` in `.env`.**
 - `FILE_UPLOAD_MAX_MEMORY_SIZE` follows `UPLOAD_FILE_MAX_SIZE`, so accepted uploads are kept in memory instead of spooled to temp files
 - `CORS_ALLOW_CREDENTIALS` is enabled for `CORS_ALLOWED_ORIGINS`, and `CSRF_TRUSTED_ORIGINS` defaults to `CORS_ALLOWED_ORIGINS`
+- All Compose files take their images from `LPR_IMAGE_PREFIX` (default `ghcr.io/slump1vn/gate-control`)
 - `retry_stuck_images` skips gate camera frames; the image list, detail and download endpoints no longer serve them
 
 ## [1.4.0] - 2026-06-02
