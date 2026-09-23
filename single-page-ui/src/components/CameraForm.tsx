@@ -39,6 +39,7 @@ const DEFAULTS: Values = {
   main_stream_path: '',
   sub_stream_path: '',
   snapshot_path: '',
+  live_snapshot_path: '',
   prefer_snapshot: true,
   roi: null,
   motion_threshold: 0.02,
@@ -46,7 +47,7 @@ const DEFAULTS: Values = {
   cooldown_s: 5,
 };
 
-const PATH_FIELDS = ['main_stream_path', 'sub_stream_path', 'snapshot_path'] as const;
+const PATH_FIELDS = ['main_stream_path', 'sub_stream_path', 'snapshot_path', 'live_snapshot_path'] as const;
 
 const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const HOSTNAME = /^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$/;
@@ -243,8 +244,20 @@ export default function CameraForm({ camera, presets, onSave, onTest, onCancel, 
 
         <div className="space-y-3">
           {PATH_FIELDS.map((f) => (
-            <Field key={f} label={{ main_stream_path: 'Main stream path', sub_stream_path: 'Sub stream path', snapshot_path: 'Snapshot path' }[f]}
-              htmlFor={`camera-${f}`} error={errorFor(f)}>
+            <Field
+              key={f}
+              label={{
+                main_stream_path: 'Main stream path',
+                sub_stream_path: 'Sub stream path',
+                snapshot_path: 'Snapshot path (recognition)',
+                live_snapshot_path: 'Snapshot path (live view)',
+              }[f]}
+              htmlFor={`camera-${f}`}
+              error={errorFor(f)}
+              hint={f === 'live_snapshot_path'
+                ? 'Usually the sub-stream: smaller frames let the monitor page refresh faster without disturbing recognition. Empty uses the path above.'
+                : undefined}
+            >
               <input id={`camera-${f}`} className={`${inputClass} font-mono text-xs`} value={values[f]}
                 placeholder={presets[values.vendor]?.[f] || ''} onChange={(e) => set(f, e.target.value)} />
             </Field>

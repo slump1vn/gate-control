@@ -115,6 +115,7 @@
 - [x] 6.3 Add a gate status panel (`/gate`) (mode, controller online, last decision) and an emergency STOP control.
 - [x] 6.4 Add `single-page-ui/src/lib/gate-api.ts` (session calls next to `api.ts`) with the new types and calls (with `credentials: 'include'` and the CSRF header); add mock data and Storybook stories for the new components — including the camera form in its empty, saved, testing, test-failed and ROI-editing states — matching the existing pattern. Mock data lives in `src/lib/gate-mock-data.ts`.
 - [x] 6.5a Add `/monitor`: live lane view per gate (snapshot proxy endpoint, read zone overlay, refresh interval, pause), camera/controller status, arm state and a recent-decision ticker.
+- [x] 6.5b Raise the live view's usable frame rate: kept-open authenticated session per camera, one shared fetcher for all viewers, separate `live_snapshot_path` (sub-stream) with fallback to the recognition path. Measured with three viewers: 1 camera request/second total, all pre-authenticated.
 - [x] 6.5 Browser end-to-end run of the SPA against a live backend, the real gate agent and a stand-in camera: login and role guards, CSRF across origins, camera validation/allowlist/test/ROI/history, gate and vehicle CRUD, manual open/STOP through the agent to the simulated arm, event filters, phone width.
 
 ## 7. Configuration and documentation

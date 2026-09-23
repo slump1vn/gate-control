@@ -172,13 +172,15 @@ export const mockCameraPresets: CameraPresets = {
     main_stream_path: '/Streaming/Channels/101',
     sub_stream_path: '/Streaming/Channels/102',
     snapshot_path: '/ISAPI/Streaming/channels/101/picture',
+    live_snapshot_path: '/ISAPI/Streaming/channels/102/picture',
   },
   dahua: {
     main_stream_path: '/cam/realmonitor?channel=1&subtype=0',
     sub_stream_path: '/cam/realmonitor?channel=1&subtype=1',
     snapshot_path: '/cgi-bin/snapshot.cgi',
+    live_snapshot_path: '/cgi-bin/snapshot.cgi?channel=1&subtype=1',
   },
-  generic: { main_stream_path: '', sub_stream_path: '', snapshot_path: '' },
+  generic: { main_stream_path: '', sub_stream_path: '', snapshot_path: '', live_snapshot_path: '' },
 };
 
 export const mockCamera: Camera = {

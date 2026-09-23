@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SPA gate pages: login with role-aware navigation, `/gate` status panel with barrier arm and emergency STOP, `/vehicles` registry with live plate normalisation, `/events` log with frame thumbnails and "open anyway", and for admins `/manage/cameras` (connection test, read-zone picker, change history) and `/manage/gates`
 
 ### Fixed
+- The live view keeps one authenticated session per camera instead of renegotiating Digest for every frame, halving the requests an authenticated camera sees, and uses `live_snapshot_path` (sub-stream by vendor preset) so frames are cheaper to encode
 - Plate crops are upscaled to `OCR_CROP_MIN_WIDTH` (default 480px, at most 4x) before the OCR phase, so small plates lose fewer characters to confusion between 2, 3 and 7
 - `TIME_ZONE` defaults to `Asia/Ho_Chi_Minh` and is configurable; the scheduler now uses it, so the nightly purge runs at 03:00 local time instead of 03:00 UTC
 - `lpr-app` serves requests with 8 gunicorn threads, so a gate decision no longer blocks other requests, including manual STOP

@@ -338,6 +338,11 @@ class Camera(models.Model):
     main_stream_path = models.CharField(max_length=255, blank=True)
     sub_stream_path = models.CharField(max_length=255, blank=True)
     snapshot_path = models.CharField(max_length=255, blank=True)
+    live_snapshot_path = models.CharField(
+        max_length=255, blank=True,
+        help_text='Snapshot path for the live monitoring view; usually the sub-stream, '
+                  'which is cheaper for the camera. Empty uses the path above.',
+    )
     prefer_snapshot = models.BooleanField(default=True)
     roi_x = models.FloatField(null=True, blank=True, validators=_unit_validators)
     roi_y = models.FloatField(null=True, blank=True, validators=_unit_validators)

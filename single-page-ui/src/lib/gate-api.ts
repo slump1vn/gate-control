@@ -336,6 +336,7 @@ export interface Camera {
   main_stream_path: string;
   sub_stream_path: string;
   snapshot_path: string;
+  live_snapshot_path: string;
   prefer_snapshot: boolean;
   roi: Roi | null;
   motion_threshold: number;
@@ -364,6 +365,7 @@ export interface CameraInput {
   main_stream_path: string;
   sub_stream_path: string;
   snapshot_path: string;
+  live_snapshot_path: string;
   prefer_snapshot: boolean;
   roi: Roi | null;
   motion_threshold: number;
@@ -371,7 +373,12 @@ export interface CameraInput {
   cooldown_s: number;
 }
 
-export type CameraPresets = Record<Vendor, { main_stream_path: string; sub_stream_path: string; snapshot_path: string }>;
+export type CameraPresets = Record<Vendor, {
+  main_stream_path: string;
+  sub_stream_path: string;
+  snapshot_path: string;
+  live_snapshot_path: string;
+}>;
 
 export interface CameraTestStep {
   name: string;

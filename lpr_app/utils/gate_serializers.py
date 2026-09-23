@@ -50,6 +50,7 @@ def serialize_camera(c):
         'main_stream_path': c.main_stream_path,
         'sub_stream_path': c.sub_stream_path,
         'snapshot_path': c.snapshot_path,
+        'live_snapshot_path': c.live_snapshot_path,
         'prefer_snapshot': c.prefer_snapshot,
         'roi': c.roi,
         'motion_threshold': c.motion_threshold,

@@ -15,7 +15,7 @@ SECRET_FIELDS = {
 AUDITED_FIELDS = {
     Camera: [
         'name', 'is_enabled', 'host', 'rtsp_port', 'http_port', 'username', 'vendor',
-        'main_stream_path', 'sub_stream_path', 'snapshot_path', 'prefer_snapshot',
+        'main_stream_path', 'sub_stream_path', 'snapshot_path', 'live_snapshot_path', 'prefer_snapshot',
         'roi_x', 'roi_y', 'roi_w', 'roi_h', 'motion_threshold', 'settle_ms', 'cooldown_s',
     ],
     GateDevice: [
@@ -127,7 +127,11 @@ def save_gate_device(gate, user, token=None):
 
 
 def delete_with_audit(obj, user):
+    from .camera_service import forget_live_session
+
     record_change(user, obj, None, action='delete')
+    if isinstance(obj, Camera):
+        forget_live_session(obj.pk)
     obj.delete()
 
 
