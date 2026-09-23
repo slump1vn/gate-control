@@ -231,6 +231,24 @@ export function getAccessEvents(params?: AccessEventFilters) {
   return request<Paginated<AccessEvent>>(`/api/v1/access-events/${query(params as Record<string, string>)}`);
 }
 
+/** Path of a live camera frame; prefix it with getApiBase() and add a cache-buster. */
+export function cameraSnapshotPath(cameraId: number): string {
+  return `/api/v1/gate/cameras/${cameraId}/snapshot/`;
+}
+
+/** The reason a live frame failed, read from the same endpoint's JSON error. */
+export async function cameraSnapshotError(cameraId: number): Promise<string> {
+  try {
+    const base = await getApiBase();
+    const res = await fetch(`${base}${cameraSnapshotPath(cameraId)}`, { credentials: 'include' });
+    if (res.ok) return '';
+    const data = await res.json().catch(() => null);
+    return data?.error || `Snapshot failed (${res.status})`;
+  } catch {
+    return 'Cannot reach the LPR service.';
+  }
+}
+
 /** Path of an event's frame; prefix it with getApiBase(). Served only to logged-in operators. */
 export function eventImagePath(eventId: number, type: 'original' | 'processed'): string {
   return `/api/v1/gate/events/${eventId}/image/${type}/`;
@@ -273,6 +291,8 @@ export interface GateDevice {
 export interface GateStatus extends GateDevice {
   simulator: SimulatorState | null;
   camera_status: string | null;
+  camera_roi: Roi | null;
+  camera_enabled: boolean | null;
   last_event: AccessEvent | null;
 }
 

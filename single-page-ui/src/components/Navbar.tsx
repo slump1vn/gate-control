@@ -18,11 +18,12 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Home' },
   { href: '/images', label: 'Images' },
+  { href: '/monitor', label: 'Monitor', role: 'gate_operator' },
   { href: '/gate', label: 'Gate', role: 'gate_operator' },
   { href: '/vehicles', label: 'Vehicles', role: 'gate_operator' },
   { href: '/events', label: 'Events', role: 'gate_operator' },
-  { href: '/admin/cameras', label: 'Cameras', role: 'gate_admin' },
-  { href: '/admin/gates', label: 'Gates', role: 'gate_admin' },
+  { href: '/manage/cameras', label: 'Cameras', role: 'gate_admin' },
+  { href: '/manage/gates', label: 'Gates', role: 'gate_admin' },
   { href: '/health', label: 'Health', external: true },
 ];
 

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session login for the SPA (`/api/v1/auth/`) with `gate_admin` / `gate_operator` roles
 - Simulated barrier implementing the ESP32 controller contract, and a Django admin "Test recognition" page that runs uploaded photos through the decision pipeline and animates the simulated arm
 - `gate-agent` service (compose profile `gate`, image `open-lpr-gate-agent`): camera snapshot/RTSP ingest, presence trigger, burst decisions, controller relay; `decide` and `replay` modes for testing without a camera
+- `/monitor` page: live view of each gate lane (snapshots proxied through `/api/v1/gate/cameras/<id>/snapshot/`), the read zone drawn over the frame, camera and controller status, barrier arm, and a rolling list of recent decisions
 - SPA gate pages: login with role-aware navigation, `/gate` status panel with barrier arm and emergency STOP, `/vehicles` registry with live plate normalisation, `/events` log with frame thumbnails and "open anyway", and for admins `/manage/cameras` (connection test, read-zone picker, change history) and `/manage/gates`
 
 ### Fixed

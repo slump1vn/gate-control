@@ -199,6 +199,9 @@ GATE_AUTO_CLOSE_SECONDS = config('GATE_AUTO_CLOSE_SECONDS', default=10, cast=int
 GATE_HEARTBEAT_TIMEOUT_SECONDS = config('GATE_HEARTBEAT_TIMEOUT_SECONDS', default=30, cast=int)
 GATE_AGENT_TOKEN = config('GATE_AGENT_TOKEN', default='')
 GATE_CONFIG_ENCRYPTION_KEY = config('GATE_CONFIG_ENCRYPTION_KEY', default='')
+# Live-view frames are reused for this long, so viewers cannot hammer the camera
+GATE_SNAPSHOT_CACHE_SECONDS = config('GATE_SNAPSHOT_CACHE_SECONDS', default=0.5, cast=float)
+
 GATE_CAMERA_ALLOWED_CIDRS = config(
     'GATE_CAMERA_ALLOWED_CIDRS',
     default='10.0.0.0/8,172.16.0.0/12,192.168.0.0/16',

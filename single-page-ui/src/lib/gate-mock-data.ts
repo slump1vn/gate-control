@@ -143,6 +143,8 @@ export const mockGateStatusSimulated: GateStatus = {
   },
   arm_state: 'moving',
   camera_status: 'streaming',
+  camera_roi: { x: 0.25, y: 0.45, w: 0.5, h: 0.4 },
+  camera_enabled: true,
   last_event: mockEventGranted,
 };
 
@@ -160,6 +162,8 @@ export const mockGateStatusEsp32Offline: GateStatus = {
   simulator: null,
   camera: { id: 2, name: 'Camera cổng sau' },
   camera_status: 'auth_failed',
+  camera_roi: null,
+  camera_enabled: true,
   last_event: mockEventNearMiss,
 };
 

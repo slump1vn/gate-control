@@ -32,7 +32,7 @@ There is no linter, formatter, or typecheck configured.
   - `management/commands/` — `setup_project`, `inspect_image`, `retry_stuck_images`, `purge_access_events`, `generate_gate_secrets`
   - Gate automation: `services/gate_service.py` (decisions, command queue), `services/plate_matcher.py` + `utils/plates.py` (normalisation, registry matching), `services/camera_service.py` (presets, allowlist, connection test), `services/config_audit.py`, `views/gate_views.py` (agent/controller/operator runtime), `views/gate_admin_views.py` (cameras, devices, vehicles, events), `views/auth_views.py` (session login), `utils/auth.py` (roles `gate_admin`/`gate_operator`, agent/device tokens)
 - **`single-page-ui/`** — Next.js 16 SPA frontend (React 19, Tailwind CSS 4, Storybook 10)
-  - Gate pages: `/login`, `/gate` (status, STOP), `/vehicles`, `/events` (operators); `/manage/cameras`, `/manage/gates` (admins). Admin pages live under `/manage`, never `/admin`: `/admin/` is the Django admin
+  - Gate pages: `/login`, `/monitor` (live lane view), `/gate` (status, STOP), `/vehicles`, `/events` (operators); `/manage/cameras`, `/manage/gates` (admins). Admin pages live under `/manage`, never `/admin`: `/admin/` is the Django admin
   - `src/lib/gate-api.ts` — session-authenticated calls (`credentials: 'include'`, `X-CSRFToken` from the `/api/v1/auth/` response body); `src/components/AuthContext.tsx` + `RequireRole.tsx` guard pages client-side only, the API enforces roles
   - Tests: `npx vitest run` runs every Storybook story in headless Chromium (needs `npx playwright install chromium` once)
 - **`canary/`** — Separate canary monitoring service (its own Dockerfile)
@@ -104,6 +104,7 @@ Barrier control from plate recognition (see `openspec/changes/2026-09-22-anpr-ga
 - `GATE_AGENT_TOKEN` — Bearer token for the gate agent's endpoints; empty rejects all agent calls (default: empty)
 - `GATE_CONFIG_ENCRYPTION_KEY` — Fernet key encrypting camera passwords and controller tokens at rest; back it up (default: empty — secrets cannot be saved). Generate both secrets with `python manage.py generate_gate_secrets`
 - `GATE_CAMERA_ALLOWED_CIDRS` — Networks camera hosts must resolve into, checked on save and before the connection test connects (default: `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`)
+- `GATE_SNAPSHOT_CACHE_SECONDS` — A live-view frame is reused for this long, so several viewers or a fast refresh interval cannot hammer the camera (default: `0.5`)
 - `GATE_BURST_FRAMES` — Max frames per decision request (default: `3`)
 - `GATE_CONSENSUS_MIN` — Frames that must agree on a plate before it can be granted (default: `2`)
 - `GATE_MIN_CONFIDENCE` — Minimum OCR confidence among the agreeing frames (default: `0.80`)
@@ -116,6 +117,7 @@ Barrier control from plate recognition (see `openspec/changes/2026-09-22-anpr-ga
 - `GATE_AUTO_CLOSE_SECONDS` — Delay before a software close (default: `10`)
 
 Gate gotchas:
+- Browsers cannot play RTSP, so the live view polls `/api/v1/gate/cameras/<id>/snapshot/` (operator login), which fetches one JPEG from the camera through `camera_service.live_snapshot` — same Digest/Basic auth and network allowlist as the connection test, with a short cache. It never exposes camera credentials.
 - Gate frames are `UploadedImage` rows with `source='gate'`. They are excluded from the public image list/detail/download endpoints and from `retry_stuck_images`; serve them only via `/api/v1/gate/events/<id>/image/<type>/` (operator login).
 - The OpenAI client has no request timeout of its own (SDK default 600s). The gate decision bounds it with `GATE_DECIDE_TIMEOUT` in `gate_service.read_frames`; frames that finish late are deleted.
 - Django never contacts an ESP32 controller. The gate agent relays every command, including manual overrides (queued as `AccessEvent`s and claimed via `/api/v1/gate/agent-commands/`).

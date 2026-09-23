@@ -191,6 +191,43 @@ def test_connection(camera, password):
     return result
 
 
+def live_snapshot(camera):
+    """
+    Fetch one frame from a saved camera for the live view, using its stored
+    password. Returns (jpeg_bytes, error); never raises for network failures.
+
+    Frames are cached briefly so several viewers (or a fast refresh interval)
+    cannot hammer the camera.
+    """
+    from django.core.cache import cache
+
+    if not camera.snapshot_path:
+        return None, 'No snapshot path configured for this camera.'
+
+    key = f'camera-snapshot:{camera.pk}'
+    cached = cache.get(key)
+    if cached is not None:
+        return cached, ''
+
+    try:
+        ip = resolve_allowed_host(camera.host)
+    except CameraHostError as exc:
+        return None, str(exc)
+
+    try:
+        password = camera.get_password()
+    except Exception as exc:
+        return None, f'Stored password cannot be read: {exc}'
+
+    step, image = _fetch_snapshot(camera, ip, password)
+    if image is None:
+        return None, step.message
+
+    ttl = max(0.05, settings.GATE_SNAPSHOT_CACHE_SECONDS)
+    cache.set(key, image, ttl)
+    return image, ''
+
+
 def _check_tcp(ip, port):
     try:
         with socket.create_connection((ip, port), timeout=TEST_TIMEOUT_SECONDS):

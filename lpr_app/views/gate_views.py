@@ -289,6 +289,9 @@ def api_gate_status(request):
         data = serialize_gate(gate)
         data['simulator'] = simulator
         data['camera_status'] = (gate.camera.agent_status or None) if gate.camera else None
+        # Enough for the live view to draw the read zone over the frame
+        data['camera_roi'] = gate.camera.roi if gate.camera else None
+        data['camera_enabled'] = gate.camera.is_enabled if gate.camera else None
         data['last_event'] = serialize_event(last) if last else None
         gates.append(data)
     return JsonResponse({'mode': gate_service.effective_mode(), 'gates': gates})

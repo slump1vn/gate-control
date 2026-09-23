@@ -13,7 +13,7 @@ import logging
 
 from django.db.models import Q
 from django.forms.models import model_to_dict
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
@@ -99,6 +99,26 @@ def api_camera_detail(request, camera_id):
         return form_errors(form)
     camera = config_audit.save_camera(form.instance, request.user, password=form.cleaned_data.get('password'))
     return JsonResponse(serialize_camera(camera))
+
+
+@require_http_methods(["GET"])
+@require_gate_operator
+def api_camera_snapshot(request, camera_id):
+    """
+    One live frame from the camera, for the monitoring view. Operators may
+    watch the lane; only admins see or change the camera's settings.
+    """
+    camera = Camera.objects.filter(pk=camera_id).first()
+    if camera is None:
+        return error('Camera not found', 'NOT_FOUND', status=404)
+
+    image, failure = camera_service.live_snapshot(camera)
+    if image is None:
+        return error(failure or 'Snapshot unavailable', 'SNAPSHOT_FAILED', status=503)
+
+    response = HttpResponse(image, content_type='image/jpeg')
+    response['Cache-Control'] = 'no-store'
+    return response
 
 
 @require_http_methods(["GET"])
