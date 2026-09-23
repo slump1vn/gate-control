@@ -227,6 +227,13 @@ class FakeWorker:
         self.started = self.stopped = False
         FakeWorker.instances.append(self)
 
+    alive = True
+
+    def is_alive(self):
+        return self.alive
+
+    finished = False
+
     def status_readout(self):
         return self.readout
 
@@ -581,3 +588,43 @@ class StatusReadoutTest(unittest.TestCase):
         self.assertIn(readout['trigger_state'], ('idle', 'motion', 'occupied'))
         self.assertLessEqual(readout['motion'], 1.0)
         self.assertEqual(readout['presence_threshold'], worker.trigger.presence_threshold)
+
+
+class WorkerSurvivalTest(unittest.TestCase):
+    """A lane must keep being watched even when something unexpected goes wrong."""
+
+    def test_an_unexpected_failure_does_not_end_the_worker(self):
+        gate = gate_config()
+        frames = [frame(), frame(), frame()]
+        worker = GateWorker(
+            gate, gate['cameras'][0], config(), settings(), mock.Mock(), None,
+            source_factory=lambda camera: FakeSource(frames),
+            clock=Clock(), sleep=lambda s: None,
+        )
+        calls = {'n': 0}
+        real_update = worker.trigger.update
+
+        def explode(frame_, now):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                raise ValueError('something unexpected')
+            return real_update(frame_, now)
+
+        worker.trigger.update = explode
+        worker.stop_event.wait = lambda delay: None
+        worker.run()   # ends on EndOfSource, not on the ValueError
+        self.assertGreater(calls['n'], 1, 'the worker stopped at the first unexpected error')
+        self.assertEqual(worker.camera_status, 'streaming')
+
+    def test_a_dead_worker_is_started_again_on_the_next_config_sync(self):
+        api = mock.Mock()
+        agent = Agent(settings(), api, worker_factory=FakeWorker)
+        FakeWorker.instances = []
+        api.agent_config.return_value = config(gate_config(1))
+        agent.sync_config()
+        first = FakeWorker.instances[0]
+        first.alive = False
+
+        api.agent_config.return_value = config(gate_config(1), version='v2')
+        agent.sync_config()
+        self.assertEqual(len(FakeWorker.instances), 2, 'the stopped worker was not restarted')

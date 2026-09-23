@@ -123,6 +123,14 @@ class GateWorker(threading.Thread):
                 if fps is not None:
                     self.fps = fps
                     metrics.FPS.labels(gate=self.label).set(fps)
+
+                fired = self.trigger.update(prepare(frame), self.clock())
+                motion, presence = self.trigger.last_scores
+                metrics.MOTION.labels(gate=self.label).set(motion)
+                metrics.PRESENCE.labels(gate=self.label).set(presence)
+                metrics.PRESENCE_THRESHOLD.labels(gate=self.label).set(self.trigger.presence_threshold)
+                if fired:
+                    self.handle_trigger(frame)
             except EndOfSource:
                 logger.info('Gate %s: replay finished', self.label)
                 self.finished = True
@@ -130,23 +138,27 @@ class GateWorker(threading.Thread):
             except CameraError as exc:
                 metrics.FRAMES.labels(gate=self.label, result='error').inc()
                 self.camera_status = exc.status
-                delay = RECONNECT_BACKOFF[min(failures, len(RECONNECT_BACKOFF) - 1)]
-                failures += 1
-                logger.warning('Gate %s: camera %s (%s); retrying in %ss', self.label, exc.status, exc, delay)
-                self.stop_event.wait(delay)
+                failures = self._back_off(failures, f'camera {exc.status} ({exc})')
                 continue
-            fired = self.trigger.update(prepare(frame), self.clock())
-            motion, presence = self.trigger.last_scores
-            metrics.MOTION.labels(gate=self.label).set(motion)
-            metrics.PRESENCE.labels(gate=self.label).set(presence)
-            metrics.PRESENCE_THRESHOLD.labels(gate=self.label).set(self.trigger.presence_threshold)
-            if fired:
-                self.handle_trigger(frame)
+            except Exception:
+                # Anything else would end this thread silently: the lane would
+                # stop being watched while the agent still looked healthy.
+                metrics.FRAMES.labels(gate=self.label, result='error').inc()
+                self._close_source()
+                logger.exception('Gate %s: unexpected failure while watching the camera', self.label)
+                failures = self._back_off(failures, 'unexpected failure')
+                continue
             # Pace the loop rather than sleeping on top of the grab: a slow
             # camera would otherwise halve the frame rate that was asked for.
             next_frame_at = max(next_frame_at + interval, self.clock() - interval)
             self.sleep(max(0.0, next_frame_at - self.clock()))
         self._close_source()
+
+    def _back_off(self, failures, reason):
+        delay = RECONNECT_BACKOFF[min(failures, len(RECONNECT_BACKOFF) - 1)]
+        logger.warning('Gate %s: %s; retrying in %ss', self.label, reason, delay)
+        self.stop_event.wait(delay)
+        return failures + 1
 
     def stop(self):
         self.stop_event.set()
@@ -354,9 +366,14 @@ class Agent:
                 key = (gate_id, camera['id'])
                 seen_workers.add(key)
                 signature = _worker_signature(gate, camera)
+                worker = self.workers.get(key)
                 if self.signatures.get(key) != signature:
                     self._restart_worker(gate, camera)
                     self.signatures[key] = signature
+                elif worker is not None and not worker.is_alive() and not worker.finished:
+                    logger.error('Gate %s: the worker watching %s stopped; starting it again',
+                                 gate['name'], camera.get('name', camera['id']))
+                    self._restart_worker(gate, camera)
         for key in list(self.workers):
             if key not in seen_workers:
                 self._stop_worker(key)
