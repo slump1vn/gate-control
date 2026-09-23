@@ -41,6 +41,7 @@ There is no linter, formatter, or typecheck configured.
 
 ## Key Patterns & Gotchas
 
+- Static files are served by WhiteNoise (`whitenoise.middleware.WhiteNoiseMiddleware`, `CompressedStaticFilesStorage`). Django itself only serves `/static/` and `/media/` when `DEBUG=True`, so production needs it for the admin's CSS/JS. `collectstatic` runs in `docker-entrypoint.sh`
 - Settings use `python-decouple` (`config()` calls in `settings.py`), not raw `os.environ`. Env vars are loaded from `.env` or `.env.llamacpp`.
 - Two env file modes: `.env` for external API, `.env.llamacpp` for bundled LlamaCpp inference. Docker Compose reads `.env.llamacpp` by default.
 - The AI client (`QwenVLClient`) wraps the `openai` Python SDK. It calls any OpenAI-compatible endpoint (LlamaCpp, vLLM, remote API).

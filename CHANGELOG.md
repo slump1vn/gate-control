@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `gate-agent` service (compose profile `gate`, image `open-lpr-gate-agent`): camera snapshot/RTSP ingest, presence trigger, burst decisions, controller relay; `decide` and `replay` modes for testing without a camera
 - SPA gate pages: login with role-aware navigation, `/gate` status panel with barrier arm and emergency STOP, `/vehicles` registry with live plate normalisation, `/events` log with frame thumbnails and "open anyway", and for admins `/manage/cameras` (connection test, read-zone picker, change history) and `/manage/gates`
 
+### Fixed
+- Static files are served by WhiteNoise, so the Django admin is styled when `DEBUG=False` (previously the admin, including the gate "Test recognition" page, loaded without CSS or JavaScript in production)
+
 ### Changed
 - `UPLOAD_FILE_MAX_SIZE` now defaults to 2MB (`2097152`) everywhere: settings.py (was 1MB), `.env` examples (was 1MB) and all Docker Compose files (was 10MB). **Docker deployments that need larger uploads must set `UPLOAD_FILE_MAX_SIZE=10485760` in `.env`.**
 - `FILE_UPLOAD_MAX_MEMORY_SIZE` follows `UPLOAD_FILE_MAX_SIZE`, so accepted uploads are kept in memory instead of spooled to temp files
