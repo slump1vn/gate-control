@@ -58,6 +58,7 @@ export const mockEventGranted: AccessEvent = {
   is_test: false,
   has_image: true,
   has_processed_image: true,
+  frame_lost: false,
 };
 
 export const mockEventNearMiss: AccessEvent = {
@@ -90,6 +91,14 @@ export const mockEventNoPlate: AccessEvent = {
   reason_display: 'No plate detected',
   has_image: false,
   has_processed_image: false,
+};
+
+export const mockEventFrameLost: AccessEvent = {
+  ...mockEventNearMiss,
+  id: 105,
+  has_image: false,
+  has_processed_image: false,
+  frame_lost: true,
 };
 
 export const mockEventManual: AccessEvent = {

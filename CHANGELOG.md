@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SPA gate pages: login with role-aware navigation, `/gate` status panel with barrier arm and emergency STOP, `/vehicles` registry with live plate normalisation, `/events` log with frame thumbnails and "open anyway", and for admins `/manage/cameras` (connection test, read-zone picker, change history) and `/manage/gates`
 
 ### Fixed
+- The event log claimed a frame it could not show when the file had gone from the media directory; it now checks the file and distinguishes "no frame" (nothing could be read) from "frame missing" (the file is gone)
 - `USE_X_FORWARDED_PROTO` lets Django trust a TLS-terminating proxy's `X-Forwarded-Proto`, so an HTTPS site is not treated as insecure and absolute URLs are built with the right scheme; `DOCKER_DEPLOYMENT.md` now carries a worked reverse-proxy configuration
 - A request the browser could not make at all reported the bare "Failed to fetch"; it now names the address it tried and what to check
 - RTSP streams are opened over TCP with a socket timeout, so a stalled stream is noticed in seconds instead of FFmpeg's 30

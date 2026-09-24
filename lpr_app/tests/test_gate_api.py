@@ -1,3 +1,4 @@
+import os
 import json
 import shutil
 import tempfile
@@ -614,3 +615,42 @@ class HeartbeatTest(TestCase):
         response = Client().post('/api/v1/gate/heartbeat/', data='nope', content_type='application/json')
         self.assertEqual(response.status_code, 400)
         self.assertEqual(self._beat(gate_id='abc').status_code, 403)
+
+
+@override_settings(**SETTINGS)
+class FrameAvailabilityTest(ApiTestBase):
+    """A record can outlive its file; the log must not claim a frame it cannot show."""
+
+    def setUp(self):
+        super().setUp()
+        self.gate = GateDevice.objects.create(name='Main')
+        self.image = UploadedImage.objects.create(
+            original_image=SimpleUploadedFile('frame.jpg', b'\xff\xd8\xff\xe0 data', content_type='image/jpeg'),
+            filename='frame.jpg', source='gate',
+        )
+        self.event = AccessEvent.objects.create(
+            gate=self.gate, decision='denied', reason='not_registered', uploaded_image=self.image,
+        )
+        self.as_operator()
+
+    def event_json(self):
+        return self.client.get('/api/v1/access-events/').json()['results'][0]
+
+    def test_a_frame_on_disk_is_offered(self):
+        data = self.event_json()
+        self.assertTrue(data['has_image'])
+        self.assertFalse(data['frame_lost'])
+
+    def test_a_missing_file_is_reported_as_lost(self):
+        os.remove(self.image.original_image.path)
+        data = self.event_json()
+        self.assertFalse(data['has_image'])
+        self.assertTrue(data['frame_lost'])
+        # And the image endpoint agrees
+        self.assertEqual(self.client.get(f'/api/v1/gate/events/{self.event.pk}/image/original/').status_code, 404)
+
+    def test_an_event_that_never_had_a_frame(self):
+        AccessEvent.objects.filter(pk=self.event.pk).update(uploaded_image=None)
+        data = self.event_json()
+        self.assertFalse(data['has_image'])
+        self.assertFalse(data['frame_lost'])

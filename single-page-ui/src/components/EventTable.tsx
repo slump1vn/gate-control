@@ -22,7 +22,18 @@ export function canOpenAnyway(e: AccessEvent): boolean {
 function Thumbnail({ event, apiBase, onPreview }: { event: AccessEvent; apiBase: string; onPreview?: EventTableProps['onPreview'] }) {
   const [failed, setFailed] = useState(false);
   if (!event.has_image || failed) {
-    return <div className="w-24 h-16 rounded bg-gray-100 dark:bg-[#2d2d2d] flex items-center justify-center text-xs text-gray-400">no image</div>;
+    // Two different faults: nothing was kept, or what was kept is gone
+    const lost = event.frame_lost || failed;
+    return (
+      <div
+        title={lost
+          ? 'The frame was kept for this event but its file is missing from the media directory.'
+          : 'No frame was kept: no frame of this burst could be read.'}
+        className="w-24 h-16 rounded bg-gray-100 dark:bg-[#2d2d2d] flex items-center justify-center text-center text-xs text-gray-400 px-1"
+      >
+        {lost ? 'frame missing' : 'no frame'}
+      </div>
+    );
   }
   const type = event.has_processed_image ? 'processed' : 'original';
   const src = `${apiBase}${eventImagePath(event.id, type)}`;

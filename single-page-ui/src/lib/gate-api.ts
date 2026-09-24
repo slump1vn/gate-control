@@ -234,6 +234,8 @@ export interface AccessEvent {
   is_test: boolean;
   has_image: boolean;
   has_processed_image: boolean;
+  /** A frame was kept for this event, but its file is gone from the media directory. */
+  frame_lost: boolean;
 }
 
 export interface AccessEventFilters {

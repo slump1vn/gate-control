@@ -1,6 +1,7 @@
 """JSON shapes for gate objects. Secrets are never serialised here."""
 
 import json
+import os
 
 from django.http import JsonResponse
 
@@ -105,6 +106,17 @@ def serialize_gate(g):
     }
 
 
+def frame_on_disk(image, field):
+    """A record can outlive its file: report what can actually be shown."""
+    stored = getattr(image, field, None) if image else None
+    if not stored:
+        return False
+    try:
+        return os.path.exists(stored.path)
+    except (ValueError, NotImplementedError):
+        return False
+
+
 def serialize_event(e):
     image = e.uploaded_image
     return {
@@ -130,8 +142,11 @@ def serialize_event(e):
         'decision_latency_ms': e.decision_latency_ms,
         'operator': e.operator.get_username() if e.operator else None,
         'is_test': e.is_test,
-        'has_image': bool(image),
-        'has_processed_image': bool(image and image.processed_image),
+        # The frame kept as evidence, if its file is still there
+        'has_image': frame_on_disk(image, 'original_image'),
+        'has_processed_image': frame_on_disk(image, 'processed_image'),
+        # A record with no file left: the media directory lost it
+        'frame_lost': bool(image) and not frame_on_disk(image, 'original_image'),
     }
 
 
