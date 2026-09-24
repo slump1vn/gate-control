@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import DisclaimerBanner from "./disclaimer-banner";
 import AppInitializer from "@/components/AppInitializer";
 import { HealthProvider } from "@/components/HealthContext";
 import { AuthProvider } from "@/components/AuthContext";
+import { I18nProvider } from "@/components/I18nContext";
 import Navbar from "@/components/Navbar";
 
 export const metadata: Metadata = {
@@ -35,12 +35,11 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-white text-gray-900 dark:bg-[#0f0f0f] dark:text-gray-100 transition-colors duration-300">
+      <I18nProvider>
       <AppInitializer>
         <HealthProvider>
         <AuthProvider>
         <Navbar />
-
-        <DisclaimerBanner />
 
         <main className="flex-1">
           {children}
@@ -79,6 +78,7 @@ export default function RootLayout({
         </AuthProvider>
         </HealthProvider>
       </AppInitializer>
+      </I18nProvider>
       </body>
     </html>
   );

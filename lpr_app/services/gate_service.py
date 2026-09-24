@@ -312,7 +312,7 @@ def decide(gate_id, uploaded_files, started=None, is_test=False, camera_id=None)
     outcome = evaluate(reads, pending, at=timezone.now())
 
     evidence_id = outcome.evidence.image_id if outcome.evidence and outcome.evidence.ok else None
-    discarded = [r.image_id for r in reads if r.image_id != evidence_id]
+    kept, discarded = frames_to_keep(reads, evidence_id, granted=outcome.granted)
     for image_id in discarded:
         discard_frame(image_id)
 
@@ -339,6 +339,8 @@ def decide(gate_id, uploaded_files, started=None, is_test=False, camera_id=None)
         decision_latency_ms=_elapsed_ms(started),
         is_test=is_test,
     )
+    if kept:
+        event.frames.set(kept)
     if not is_test:
         metrics.record_gate_decision(event)
     actuate = granted and can_actuate(gate, mode)
@@ -348,6 +350,24 @@ def decide(gate_id, uploaded_files, started=None, is_test=False, camera_id=None)
         event.confidence, event.frames_agreed, event.frames_read, mode, event.decision_latency_ms,
     )
     return Decision(event=event, outcome=outcome, actuate=actuate, discarded=discarded)
+
+
+def frames_to_keep(reads, evidence_id, granted):
+    """
+    Split a burst into the frames worth keeping and the ones to delete.
+
+    Only the evidence frame is kept by default: the others cost disk and say
+    little once a plate has been read. When a plate was misread, though, the
+    frames that were thrown away are exactly the ones worth looking at, so
+    GATE_KEEP_FRAMES can keep the whole burst for refusals, or always.
+    """
+    policy = str(getattr(settings, 'GATE_KEEP_FRAMES', 'evidence')).lower()
+    all_ids = [r.image_id for r in reads]
+    keep_all = policy == 'all' or (policy == 'denied' and not granted)
+    if keep_all:
+        return all_ids, []
+    kept = [evidence_id] if evidence_id else []
+    return kept, [image_id for image_id in all_ids if image_id != evidence_id]
 
 
 def camera_direction(gate, camera_id):

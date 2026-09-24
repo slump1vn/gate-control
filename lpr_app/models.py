@@ -583,6 +583,12 @@ class AccessEvent(models.Model):
     mode = models.CharField(max_length=10, default='shadow')
     uploaded_image = models.ForeignKey(
         UploadedImage, null=True, blank=True, on_delete=models.SET_NULL, related_name='access_events',
+        help_text='The frame the plate was read from.',
+    )
+    frames = models.ManyToManyField(
+        UploadedImage, blank=True, related_name='frame_events',
+        help_text='Every frame of the burst that was kept, including the one above. '
+                  'Which ones survive is set by GATE_KEEP_FRAMES.',
     )
     command = models.CharField(max_length=10, blank=True)
     command_sent = models.BooleanField(default=False)

@@ -1,16 +1,22 @@
+'use client';
+
+import { useI18n } from './I18nContext';
+import type { Dictionary } from '@/lib/i18n/dictionaries';
 import { Badge, BadgeColor } from './ui';
 
-const STATUS: Record<string, { color: BadgeColor; label: string; hint: string }> = {
-  streaming: { color: 'green', label: 'Streaming', hint: 'The gate agent is receiving frames.' },
-  reconnecting: { color: 'yellow', label: 'Reconnecting', hint: 'The agent lost the camera and is retrying.' },
-  auth_failed: { color: 'red', label: 'Auth failed', hint: 'The camera rejected the username or password.' },
-  unreachable: { color: 'red', label: 'Unreachable', hint: 'The agent cannot connect to the camera.' },
-  disabled: { color: 'gray', label: 'Disabled', hint: 'The camera is disabled in its settings.' },
+const STATUS: Record<string, { color: BadgeColor; label: keyof Dictionary; hint: keyof Dictionary }> = {
+  streaming: { color: 'green', label: 'camera.streaming', hint: 'camera.streamingHint' },
+  reconnecting: { color: 'yellow', label: 'camera.reconnecting', hint: 'camera.reconnectingHint' },
+  auth_failed: { color: 'red', label: 'camera.authFailed', hint: 'camera.authFailedHint' },
+  unreachable: { color: 'red', label: 'camera.unreachable', hint: 'camera.unreachableHint' },
+  disabled: { color: 'gray', label: 'camera.disabled', hint: 'camera.disabledHint' },
 };
 
 /** Camera status as last reported by the gate agent. */
 export default function CameraStatusBadge({ status }: { status: string | null | undefined }) {
-  if (!status) return <Badge color="gray" title="The gate agent has not reported this camera yet.">No report</Badge>;
-  const s = STATUS[status] ?? { color: 'gray' as BadgeColor, label: status, hint: '' };
-  return <Badge color={s.color} title={s.hint}>{s.label}</Badge>;
+  const { t } = useI18n();
+  if (!status) return <Badge color="gray" title={t('camera.noReportHint')}>{t('camera.noReport')}</Badge>;
+  const s = STATUS[status];
+  if (!s) return <Badge color="gray">{status}</Badge>;
+  return <Badge color={s.color} title={t(s.hint)}>{t(s.label)}</Badge>;
 }

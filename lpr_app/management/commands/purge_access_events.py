@@ -32,12 +32,16 @@ class Command(BaseCommand):
         now = timezone.now()
 
         expired = AccessEvent.objects.filter(timestamp__lt=now - timedelta(days=days))
-        image_ids = list(expired.exclude(uploaded_image=None).values_list('uploaded_image_id', flat=True))
+        image_ids = set(expired.exclude(uploaded_image=None).values_list('uploaded_image_id', flat=True))
+        image_ids |= set(UploadedImage.objects.filter(frame_events__in=expired).values_list('id', flat=True))
+        image_ids = list(image_ids)
         event_count = expired.count()
 
+        # A frame belongs to an event either as its evidence or as one of the
+        # kept burst frames; anything else is left over from a lost decision.
         orphans = list(
             UploadedImage.objects.filter(source=FRAME_SOURCE, upload_timestamp__lt=now - ORPHAN_FRAME_AGE)
-            .filter(access_events=None)
+            .filter(access_events=None, frame_events=None)
             .values_list('id', flat=True)
         )
 

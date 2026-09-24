@@ -8,6 +8,7 @@ import { getImages, isUploadPublic } from '@/lib/api';
 import type { ImageSummary } from '@/lib/api';
 import ImageCard from '@/components/ImageCard';
 import { useAuth } from '@/components/AuthContext';
+import { useI18n } from '@/components/I18nContext';
 import { useHealth } from '@/components/HealthContext';
 import AvailabilityGraph from '@/components/AvailabilityGraph';
 import Spinner from '@/components/Spinner';
@@ -15,23 +16,22 @@ import { cardClass, primaryButton } from '@/components/ui';
 
 /** Visitors who are not signed in are shown the door, not the model. */
 function SignedOut() {
+  const { t } = useI18n();
   return (
     <div className="max-w-md mx-auto px-4 py-20 text-center">
       <h1 className="text-3xl font-light bg-gradient-to-r from-[#667eea] to-[#764ba2] bg-clip-text text-transparent mb-3">
         VietinBankSchool LPR
       </h1>
       <div className={`${cardClass} p-6`}>
-        <p className="text-gray-600 dark:text-gray-400 mb-5">
-          Automatic barrier control for the school gate. Sign in to watch the lanes, manage registered
-          vehicles and review access events.
-        </p>
-        <Link href="/login" className={`${primaryButton} inline-block`}>Sign in</Link>
+        <p className="text-gray-600 dark:text-gray-400 mb-5">{t('home.intro')}</p>
+        <Link href="/login" className={`${primaryButton} inline-block`}>{t('auth.signIn')}</Link>
       </div>
     </div>
   );
 }
 
 export default function HomePage() {
+  const { t } = useI18n();
   const router = useRouter();
   const { loading, authenticated } = useAuth();
   const { isHealthy } = useHealth();
@@ -66,7 +66,7 @@ export default function HomePage() {
         <h1 className="text-4xl font-light bg-gradient-to-r from-[#667eea] to-[#764ba2] bg-clip-text text-transparent">
           VietinBankSchool LPR
         </h1>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">Upload an image to detect and recognize license plates</p>
+        <p className="mt-2 text-gray-600 dark:text-gray-400">{t('home.uploadHint')}</p>
       </div>
 
       {rateLimitError && (

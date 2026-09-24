@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { DIRECTION_LABELS } from '@/lib/gate-api';
+
 import type { Command, GateStatus } from '@/lib/gate-api';
 import BarrierArm from './BarrierArm';
 import CameraStatusBadge from './CameraStatusBadge';
-import { CommandBadge, ConfidenceText, DecisionBadge, reasonLabel } from './EventBadges';
+import { CommandBadge, ConfidenceText, DecisionBadge, useReasonLabel } from './EventBadges';
+import { useI18n } from './I18nContext';
+import type { Dictionary } from '@/lib/i18n/dictionaries';
 import { formatRelativeTime } from '@/lib/relative-time';
 import { Badge, cardClass, dangerButton, secondaryButton } from './ui';
 
@@ -16,6 +18,8 @@ interface GateStatusCardProps {
 }
 
 export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCardProps) {
+  const { t } = useI18n();
+  const reasonLabel = useReasonLabel();
   const [busy, setBusy] = useState<Command | null>(null);
   const simulated = gate.controller_type === 'simulator';
   // Shadow mode forbids physical actuation only: simulated gates still move.
@@ -40,10 +44,10 @@ export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCard
           <p className="text-xs text-gray-500 dark:text-gray-400">{gate.location}</p>
         </div>
         <div className="flex flex-wrap gap-1 justify-end">
-          {simulated && <Badge color="purple">Simulated</Badge>}
-          {!gate.is_enabled && <Badge color="gray">Disabled</Badge>}
-          <Badge color={gate.online ? 'green' : 'red'} title={gate.last_seen ? `Last heartbeat ${gate.last_seen}` : 'No heartbeat yet'}>
-            Controller {gate.online ? 'online' : 'offline'}
+          {simulated && <Badge color="purple">{t('gate.simulated')}</Badge>}
+          {!gate.is_enabled && <Badge color="gray">{t('gate.disabled')}</Badge>}
+          <Badge color={gate.online ? 'green' : 'red'}>
+            {t(gate.online ? 'gate.controllerOnline' : 'gate.controllerOffline')}
           </Badge>
         </div>
       </header>
@@ -52,11 +56,13 @@ export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCard
         <BarrierArm state={armState} position={gate.simulator?.position} />
         <dl className="text-sm space-y-1">
           <div className="flex justify-between gap-2">
-            <dt className="text-gray-500 dark:text-gray-400">Cameras</dt>
+            <dt className="text-gray-500 dark:text-gray-400">{t('gate.cameras')}</dt>
             <dd className="text-right space-y-0.5">
-              {gate.cameras.length === 0 ? <span className="text-gray-400">none</span> : gate.cameras.map((cam) => (
+              {gate.cameras.length === 0 ? <span className="text-gray-400">{t('common.none')}</span> : gate.cameras.map((cam) => (
                 <div key={cam.id} className="flex items-center justify-end gap-1">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">{DIRECTION_LABELS[cam.direction]}</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {t(`gate.${cam.direction === 'in' ? 'entry' : 'exit'}` as keyof Dictionary)}
+                  </span>
                   <span className="truncate max-w-[9rem]">{cam.name}</span>
                   <CameraStatusBadge status={cam.agent_status} />
                 </div>
@@ -64,20 +70,20 @@ export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCard
             </dd>
           </div>
           <div className="flex justify-between gap-2">
-            <dt className="text-gray-500 dark:text-gray-400">Last command</dt>
+            <dt className="text-gray-500 dark:text-gray-400">{t('gate.lastCommand')}</dt>
             <dd className="text-right truncate" title={gate.last_command_result}>{gate.last_command_result || '—'}</dd>
           </div>
           {!simulated && (
             <div className="flex justify-between gap-2">
-              <dt className="text-gray-500 dark:text-gray-400">Last heartbeat</dt>
-              <dd>{gate.last_seen ? formatRelativeTime(gate.last_seen) : 'never'}</dd>
+              <dt className="text-gray-500 dark:text-gray-400">{t('gate.lastHeartbeat')}</dt>
+              <dd>{gate.last_seen ? formatRelativeTime(gate.last_seen) : t('common.never')}</dd>
             </div>
           )}
         </dl>
       </div>
 
       <div className="border-t border-gray-200 dark:border-gray-700 pt-3 text-sm">
-        <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Last decision</p>
+        <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">{t('gate.lastDecision')}</p>
         {last ? (
           <div className="flex flex-wrap items-center gap-2">
             <DecisionBadge decision={last.decision} />
@@ -88,35 +94,33 @@ export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCard
               </>
             )}
             <span className="text-gray-600 dark:text-gray-300">{reasonLabel(last)}</span>
-            {last.operator && <span className="text-gray-500 dark:text-gray-400">by {last.operator}</span>}
+            {last.operator && <span className="text-gray-500 dark:text-gray-400">{t('events.by', { user: last.operator })}</span>}
             {last.vehicle && <span className="text-gray-500 dark:text-gray-400">· {last.vehicle.owner_name}</span>}
-            {last.is_test && <Badge color="purple">test</Badge>}
+            {last.is_test && <Badge color="purple">{t('events.test')}</Badge>}
             <span className="text-gray-400 ml-auto">{last.timestamp ? formatRelativeTime(last.timestamp) : ''}</span>
             <div className="w-full"><CommandBadge event={last} /></div>
           </div>
         ) : (
-          <p className="text-gray-400">No decisions yet</p>
+          <p className="text-gray-400">{t('gate.noDecisions')}</p>
         )}
       </div>
 
       <div className="flex flex-wrap gap-2">
         <button className={secondaryButton} disabled={busy !== null} onClick={() => send('open')}>
-          {busy === 'open' ? 'Opening…' : 'Open'}
+          {t(busy === 'open' ? 'gate.opening' : 'gate.open')}
         </button>
         <button className={secondaryButton} disabled={busy !== null} onClick={() => send('close')}>
-          {busy === 'close' ? 'Closing…' : 'Close'}
+          {t(busy === 'close' ? 'gate.closing' : 'gate.close')}
         </button>
-        <button className={`${dangerButton} ml-auto`} disabled={busy === 'stop'} onClick={() => send('stop')} aria-label={`Stop gate ${gate.name}`}>
-          STOP
+        <button className={`${dangerButton} ml-auto`} disabled={busy === 'stop'} onClick={() => send('stop')} aria-label={`STOP ${gate.name}`}>
+          {t('gate.stop')}
         </button>
       </div>
       {gate.camera_warning && (
         <p className="text-xs text-yellow-700 dark:text-yellow-400">{gate.camera_warning}</p>
       )}
       {commandsLogged && (
-        <p className="text-xs text-yellow-700 dark:text-yellow-400">
-          Shadow mode: commands for this gate are recorded but not sent to the barrier.
-        </p>
+        <p className="text-xs text-yellow-700 dark:text-yellow-400">{t('gate.shadowNote')}</p>
       )}
     </section>
   );

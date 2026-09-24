@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getApiBase } from '@/lib/api';
-import { DIRECTION_LABELS, getAccessEvents, getGateStatus } from '@/lib/gate-api';
+import { getAccessEvents, getGateStatus } from '@/lib/gate-api';
 import type { AccessEvent, GateStatusResponse } from '@/lib/gate-api';
 import { usePolling } from '@/hooks/usePolling';
 import RequireRole from '@/components/RequireRole';
@@ -11,7 +11,9 @@ import LiveCameraView from '@/components/LiveCameraView';
 import TriggerReadout from '@/components/TriggerReadout';
 import BarrierArm from '@/components/BarrierArm';
 import CameraStatusBadge from '@/components/CameraStatusBadge';
-import { ConfidenceText, DecisionBadge, reasonLabel } from '@/components/EventBadges';
+import { ConfidenceText, DecisionBadge, useReasonLabel } from '@/components/EventBadges';
+import { useI18n } from '@/components/I18nContext';
+import type { Dictionary } from '@/lib/i18n/dictionaries';
 import Spinner from '@/components/Spinner';
 import { Alert, Badge, PageHeader, cardClass, formatDateTime, inputClass } from '@/components/ui';
 
@@ -21,14 +23,16 @@ const EVENT_POLL_MS = 3000;
 // The camera also serves the gate agent. Asking it for snapshots faster than
 // once a second makes some models answer HTTP 500, so that is the ceiling here;
 // the service caches frames and will not hit the camera more often anyway.
-const INTERVALS = [
-  { label: '1 frame/s', value: 1000 },
-  { label: '1 frame / 2s', value: 2000 },
-  { label: '1 frame / 5s', value: 5000 },
-  { label: 'Paused', value: 0 },
+const INTERVALS: { label: keyof Dictionary; value: number }[] = [
+  { label: 'monitor.fps.1s', value: 1000 },
+  { label: 'monitor.fps.2s', value: 2000 },
+  { label: 'monitor.fps.5s', value: 5000 },
+  { label: 'monitor.fps.paused', value: 0 },
 ];
 
 function MonitorContent() {
+  const { t } = useI18n();
+  const reasonLabel = useReasonLabel();
   const [apiBase, setApiBase] = useState('');
   const [status, setStatus] = useState<GateStatusResponse | null>(null);
   const [events, setEvents] = useState<AccessEvent[]>([]);
@@ -43,9 +47,9 @@ function MonitorContent() {
       setStatus(await getGateStatus());
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load gate status');
+      setError(err instanceof Error ? err.message : t('gate.statusFailed'));
     }
-  }, []);
+  }, [t]);
 
   const loadEvents = useCallback(async () => {
     try {
@@ -60,17 +64,17 @@ function MonitorContent() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <PageHeader title="Live monitor">
-        <label className="text-sm text-gray-500 dark:text-gray-400" htmlFor="monitor-interval">Refresh</label>
+      <PageHeader title={t('monitor.title')}>
+        <label className="text-sm text-gray-500 dark:text-gray-400" htmlFor="monitor-interval">{t('monitor.refresh')}</label>
         <select id="monitor-interval" className={`${inputClass} w-auto`} value={intervalMs}
           onChange={(e) => setIntervalMs(Number(e.target.value))}>
-          {INTERVALS.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
+          {INTERVALS.map((i) => <option key={i.value} value={i.value}>{t(i.label)}</option>)}
         </select>
         <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
           <input type="checkbox" checked={showRoi} onChange={(e) => setShowRoi(e.target.checked)} className="w-4 h-4 accent-purple-600" />
-          Read zone
+          {t('monitor.readZone')}
         </label>
-        <Link href="/gate" className="text-sm text-purple-600 dark:text-purple-400 hover:underline">Controls →</Link>
+        <Link href="/gate" className="text-sm text-purple-600 dark:text-purple-400 hover:underline">{t('monitor.controls')}</Link>
       </PageHeader>
 
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
@@ -78,7 +82,7 @@ function MonitorContent() {
       {!status ? (
         error ? null : <Spinner />
       ) : gates.length === 0 ? (
-        <div className="text-center py-12 text-gray-500 dark:text-gray-400">No gates configured.</div>
+        <div className="text-center py-12 text-gray-500 dark:text-gray-400">{t('monitor.noGates')}</div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
           {gates.map((gate) => (
@@ -88,7 +92,7 @@ function MonitorContent() {
                   <h2 className="font-semibold">{gate.name}</h2>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{gate.location}</p>
                 </div>
-                <Badge color={gate.online ? 'green' : 'red'}>{gate.online ? 'Controller online' : 'Controller offline'}</Badge>
+                <Badge color={gate.online ? 'green' : 'red'}>{t(gate.online ? 'gate.controllerOnline' : 'gate.controllerOffline')}</Badge>
               </header>
 
               {gate.cameras.length > 0 ? (
@@ -96,10 +100,12 @@ function MonitorContent() {
                   {gate.cameras.map((cam) => (
                     <div key={cam.id}>
                       <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <Badge color={cam.direction === 'in' ? 'blue' : 'purple'}>{DIRECTION_LABELS[cam.direction]}</Badge>
+                        <Badge color={cam.direction === 'in' ? 'blue' : 'purple'}>
+                          {t(`gate.${cam.direction === 'in' ? 'entry' : 'exit'}` as keyof Dictionary)}
+                        </Badge>
                         <span className="text-sm truncate">{cam.name}</span>
                         <span className="ml-auto flex gap-1">
-                          {!cam.is_enabled && <Badge color="gray">Disabled</Badge>}
+                          {!cam.is_enabled && <Badge color="gray">{t('gate.disabled')}</Badge>}
                           <CameraStatusBadge status={cam.agent_status} />
                         </span>
                       </div>
@@ -116,7 +122,7 @@ function MonitorContent() {
                 </div>
               ) : (
                 <div className="aspect-video rounded-lg bg-gray-100 dark:bg-[#2d2d2d] flex items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                  Assign cameras to this gate to see the lane
+                  {t('monitor.assignCameras')}
                 </div>
               )}
               {gate.camera_warning && (
@@ -126,7 +132,7 @@ function MonitorContent() {
               <div className="flex items-center gap-4 mt-3">
                 <BarrierArm state={gate.simulator?.arm_state ?? gate.arm_state} position={gate.simulator?.position} size={110} />
                 <div className="text-sm min-w-0">
-                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Last decision</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{t('gate.lastDecision')}</p>
                   {gate.last_event ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <DecisionBadge decision={gate.last_event.decision} />
@@ -138,7 +144,7 @@ function MonitorContent() {
                       )}
                       <span className="text-gray-600 dark:text-gray-300 truncate">{reasonLabel(gate.last_event)}</span>
                     </div>
-                  ) : <p className="text-gray-400">No decisions yet</p>}
+                  ) : <p className="text-gray-400">{t('gate.noDecisions')}</p>}
                 </div>
               </div>
             </section>
@@ -147,9 +153,9 @@ function MonitorContent() {
       )}
 
       <section className={`${cardClass} p-4`}>
-        <h2 className="font-semibold mb-3">Recent events</h2>
+        <h2 className="font-semibold mb-3">{t('monitor.recentEvents')}</h2>
         {events.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">Nothing yet.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t('monitor.nothingYet')}</p>
         ) : (
           <ul className="divide-y divide-gray-200 dark:divide-gray-700 text-sm">
             {events.map((e) => (
@@ -165,7 +171,7 @@ function MonitorContent() {
           </ul>
         )}
         <Link href="/events" className="inline-block mt-3 text-sm text-purple-600 dark:text-purple-400 hover:underline">
-          All events →
+          {t('monitor.allEvents')}
         </Link>
       </section>
     </div>

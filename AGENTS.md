@@ -37,6 +37,7 @@ There is no linter, formatter, or typecheck configured.
   - Gate pages: `/login`, `/monitor` (live lane view), `/gate` (status, STOP), `/vehicles`, `/events` (operators); `/manage/cameras`, `/manage/gates` (admins). Admin pages live under `/manage`, never `/admin`: `/admin/` is the Django admin
   - `src/lib/gate-api.ts` — session-authenticated calls (`credentials: 'include'`, `X-CSRFToken` from the `/api/v1/auth/` response body); `src/components/AuthContext.tsx` + `RequireRole.tsx` guard pages client-side only, the API enforces roles
   - Tests: `npx vitest run` runs every Storybook story in headless Chromium (needs `npx playwright install chromium` once)
+  - Every user-facing string comes from `src/lib/i18n/dictionaries.ts` through `useI18n().t('key')` — never hard-code text in a component. `I18nProvider` (`src/components/I18nContext.tsx`) defaults to Vietnamese, remembers the choice in `localStorage['lpr-lang']` and falls back to English for a key a language is missing; `LanguageToggle` in the navbar switches VI/EN. Stories render without a provider, so they show the default language
 - **`canary/`** — Separate canary monitoring service (its own Dockerfile)
 - **`gate-agent/`** — Gate camera agent (own package, Dockerfile, CI workflow `gate-agent-publish.yml`, image `open-lpr-gate-agent`). Tests: `cd gate-agent && python -m unittest discover -s tests -t .`. See `gate-agent/README.md`
 - **`blackbox/`** — Blackbox exporter config for Prometheus probing
@@ -121,6 +122,7 @@ Barrier control from plate recognition (see `openspec/changes/2026-09-22-anpr-ga
 - `GATE_COMMAND_TTL_SECONDS` — Manual commands not picked up by the agent within this time expire and are never sent (default: `15`)
 - `GATE_HEARTBEAT_TIMEOUT_SECONDS` — Controller is shown offline after this long without a heartbeat (default: `30`)
 - `GATE_EVENT_RETENTION_DAYS` — Access events and their frames are purged daily after this many days (default: `90`)
+- `GATE_KEEP_FRAMES` — Which frames of a decision are kept: `evidence` (only the frame the plate was read from), `denied` (every frame of a denied decision, so a missed vehicle can be reviewed) or `all` (default: `evidence`). Extra frames hang off `AccessEvent.frames`, are served by `/api/v1/gate/events/<id>/image/<type>/?frame=<id>` and are purged with their event
 - `GATE_AUTO_CLOSE` — `controller` (barrier's own timer) or `software`; `software` is refused for gates without `has_safety_input` (default: `controller`)
 - `GATE_AUTO_CLOSE_SECONDS` — Delay before a software close (default: `10`)
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { useI18n } from './I18nContext';
+
 interface PaginationProps {
   currentPage: number;
   totalPages: number;
@@ -7,6 +9,7 @@ interface PaginationProps {
 }
 
 export default function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
+  const { t } = useI18n();
   if (totalPages <= 1) return null;
 
   const pages: (number | string)[] = [];
@@ -31,7 +34,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
         disabled={currentPage <= 1}
         className="px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2d2d2d] disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Prev
+        {t('common.prev')}
       </button>
       {pages.map((p, i) =>
         typeof p === 'string' ? (
@@ -55,7 +58,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
         disabled={currentPage >= totalPages}
         className="px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2d2d2d] disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Next
+        {t('common.next')}
       </button>
     </div>
   );

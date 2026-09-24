@@ -365,7 +365,7 @@ def api_plate_preview(request):
 def api_access_events(request):
     queryset = AccessEvent.objects.select_related(
         'gate', 'camera', 'vehicle', 'near_miss_vehicle', 'operator', 'uploaded_image',
-    )
+    ).prefetch_related('frames')
     params = request.GET
     if params.get('gate', '').isdigit():
         queryset = queryset.filter(gate_id=int(params['gate']))
@@ -397,7 +397,7 @@ def api_access_events(request):
 def api_access_event_detail(request, event_id):
     event = AccessEvent.objects.select_related(
         'gate', 'vehicle', 'near_miss_vehicle', 'operator', 'uploaded_image',
-    ).filter(pk=event_id).first()
+    ).prefetch_related('frames').filter(pk=event_id).first()
     if event is None:
         return error('Event not found', 'NOT_FOUND', status=404)
     data = serialize_event(event)

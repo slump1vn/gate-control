@@ -2,6 +2,9 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { ApiError, cameraSnapshotPath } from '@/lib/gate-api';
+import { useI18n } from './I18nContext';
+import type { Dictionary } from '@/lib/i18n/dictionaries';
+import type { Translate } from './I18nContext';
 import type { Camera, CameraInput, CameraPresets, CameraTestResult as TestResult, Vendor } from '@/lib/gate-api';
 import CameraTestResult from './CameraTestResult';
 import RoiPicker from './RoiPicker';
@@ -57,12 +60,12 @@ const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]
 const HOSTNAME = /^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$/;
 
 /** Same rules as the server's validate_host_syntax; the network allowlist is checked server-side. */
-export function hostError(host: string): string | null {
+export function hostError(host: string, t: Translate): string | null {
   const h = host.trim();
-  if (!h) return 'Host is required.';
-  if (/[:/@?\s\\]/.test(h)) return 'Enter only an IP address or hostname, without scheme, port, path or credentials.';
-  if (/^[\d.]+$/.test(h)) return IPV4.test(h) ? null : `"${h}" is not a valid IPv4 address.`;
-  return HOSTNAME.test(h) ? null : `"${h}" is not a valid IPv4 address or hostname.`;
+  if (!h) return t('cameraForm.hostRequired');
+  if (/[:/@?\s\\]/.test(h)) return t('cameraForm.hostSyntax');
+  if (/^[\d.]+$/.test(h)) return IPV4.test(h) ? null : t('cameraForm.hostNotIp', { host: h });
+  return HOSTNAME.test(h) ? null : t('cameraForm.hostNotName', { host: h });
 }
 
 function toValues(camera: Camera | null | undefined, presets: CameraPresets): Values {
@@ -72,19 +75,21 @@ function toValues(camera: Camera | null | undefined, presets: CameraPresets): Va
   return v as unknown as Values;
 }
 
-function clientErrors(v: Values, raw: Record<NumberField, string>): Record<string, string> {
+function clientErrors(v: Values, raw: Record<NumberField, string>, t: Translate): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!v.name.trim()) errors.name = 'Name is required.';
-  const h = hostError(v.host);
+  if (!v.name.trim()) errors.name = t('cameraForm.nameRequired');
+  const h = hostError(v.host, t);
   if (h) errors.host = h;
   for (const port of ['rtsp_port', 'http_port'] as const) {
     const n = Number(raw[port]);
-    if (!/^\d+$/.test(raw[port]) || n < 1 || n > 65535) errors[port] = 'Port must be a whole number from 1 to 65535.';
+    if (!/^\d+$/.test(raw[port]) || n < 1 || n > 65535) errors[port] = t('cameraForm.portRange');
   }
-  const t = Number(raw.motion_threshold);
-  if (raw.motion_threshold === '' || isNaN(t) || t < 0 || t > 1) errors.motion_threshold = 'Between 0 and 1.';
+  const threshold = Number(raw.motion_threshold);
+  if (raw.motion_threshold === '' || isNaN(threshold) || threshold < 0 || threshold > 1) {
+    errors.motion_threshold = t('cameraForm.between01');
+  }
   for (const f of ['settle_ms', 'cooldown_s'] as const) {
-    if (!/^\d+$/.test(raw[f])) errors[f] = 'A whole number, 0 or more.';
+    if (!/^\d+$/.test(raw[f])) errors[f] = t('cameraForm.wholeNumber');
   }
   return errors;
 }
@@ -93,6 +98,7 @@ export default function CameraForm({
   camera, presets, onSave, onTest, onCancel,
   initialTest = { state: 'idle' }, initialRoiEditing = false, apiBase,
 }: CameraFormProps) {
+  const { t } = useI18n();
   const initial = useMemo(() => toValues(camera, presets), [camera, presets]);
   const [values, setValues] = useState<Values>(initial);
   // Number inputs are kept as typed, so a half-typed value is not coerced.
@@ -134,7 +140,7 @@ export default function CameraForm({
     settle_ms: Number(raw.settle_ms),
     cooldown_s: Number(raw.cooldown_s),
   };
-  const errors = clientErrors(values, raw);
+  const errors = clientErrors(values, raw, t);
   const dirty = JSON.stringify(current) !== JSON.stringify(initial) || password !== '';
   const testSnapshot = test.state === 'done' ? test.result.image : null;
   const snapshot = live && liveSrc ? liveSrc : testSnapshot;
@@ -176,7 +182,7 @@ export default function CameraForm({
       const { __all__, roi_x, roi_y, roi_w, roi_h, ...fields } = err.fieldErrors;
       const roi = [roi_x, roi_y, roi_w, roi_h].flat().filter(Boolean) as string[];
       setServerErrors({ ...fields, roi });
-      setFormError([...(__all__ ?? []), ...roi].join(' ') || 'Please correct the highlighted fields.');
+      setFormError([...(__all__ ?? []), ...roi].join(' ') || t('cameraForm.fixFields'));
     } else {
       setFormError(err instanceof Error ? err.message : String(err));
     }
@@ -225,39 +231,41 @@ export default function CameraForm({
       <div className={`${cardClass} p-5 space-y-4`}>
         {formError && <Alert>{formError}</Alert>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Name" htmlFor="camera-name" error={errorFor('name')}>
+          <Field label={t('cameraForm.name')} htmlFor="camera-name" error={errorFor('name')}>
             <input id="camera-name" className={inputClass} value={values.name}
               onChange={(e) => set('name', e.target.value)} onBlur={() => touch('name')} />
           </Field>
-          <Field label="Vendor" htmlFor="camera-vendor" error={errorFor('vendor')} hint="Fills in the stream and snapshot paths">
+          <Field label={t('cameraForm.vendor')} htmlFor="camera-vendor" error={errorFor('vendor')} hint={t('cameraForm.vendorHint')}>
             <select id="camera-vendor" className={inputClass} value={values.vendor} onChange={(e) => changeVendor(e.target.value as Vendor)}>
               <option value="hikvision">Hikvision</option>
               <option value="dahua">Dahua</option>
-              <option value="generic">Generic / other</option>
+              <option value="generic">{t('cameraForm.generic')}</option>
             </select>
           </Field>
-          <Field label="Host / IP address" htmlFor="camera-host" error={errorFor('host')}
-            hint="Local address of the camera, e.g. 192.168.1.64. Must be inside the allowed camera networks.">
+          <Field label={t('cameraForm.host')} htmlFor="camera-host" error={errorFor('host')}
+            hint={t('cameraForm.hostHint')}>
             <input id="camera-host" className={`${inputClass} font-mono`} value={values.host} placeholder="192.168.1.64"
               onChange={(e) => set('host', e.target.value.trim())} onBlur={() => touch('host')} aria-invalid={errorFor('host').length > 0} />
           </Field>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="RTSP port" htmlFor="camera-rtsp_port" error={errorFor('rtsp_port')}>
+            <Field label={t('cameraForm.rtspPort')} htmlFor="camera-rtsp_port" error={errorFor('rtsp_port')}>
               {numberInput('rtsp_port', { min: '1', max: '65535' })}
             </Field>
-            <Field label="HTTP port" htmlFor="camera-http_port" error={errorFor('http_port')}>
+            <Field label={t('cameraForm.httpPort')} htmlFor="camera-http_port" error={errorFor('http_port')}>
               {numberInput('http_port', { min: '1', max: '65535' })}
             </Field>
           </div>
-          <Field label="Username" htmlFor="camera-username" error={errorFor('username')}>
+          <Field label={t('cameraForm.username')} htmlFor="camera-username" error={errorFor('username')}>
             <input id="camera-username" className={inputClass} autoComplete="off" value={values.username}
               onChange={(e) => set('username', e.target.value)} />
           </Field>
           <Field
-            label="Password"
+            label={t('cameraForm.password')}
             htmlFor="camera-password"
             error={serverErrors.password}
-            hint={camera?.password_set ? <>Leave empty to keep the current password. <Badge color="green">Password set</Badge></> : 'Stored encrypted; never shown again.'}
+            hint={camera?.password_set
+              ? <>{t('cameraForm.passwordKeep')} <Badge color="green">{t('cameraForm.passwordSet')}</Badge></>
+              : t('cameraForm.passwordNew')}
           >
             <input id="camera-password" type="password" className={inputClass} autoComplete="new-password"
               placeholder={camera?.password_set ? '••••••••' : ''} value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -268,17 +276,15 @@ export default function CameraForm({
           {PATH_FIELDS.map((f) => (
             <Field
               key={f}
-              label={{
-                main_stream_path: 'Main stream path',
-                sub_stream_path: 'Sub stream path',
-                snapshot_path: 'Snapshot path (recognition)',
-                live_snapshot_path: 'Snapshot path (live view)',
-              }[f]}
+              label={t(({
+                main_stream_path: 'cameraForm.mainPath',
+                sub_stream_path: 'cameraForm.subPath',
+                snapshot_path: 'cameraForm.snapshotPath',
+                live_snapshot_path: 'cameraForm.livePath',
+              } as Record<string, keyof Dictionary>)[f])}
               htmlFor={`camera-${f}`}
               error={errorFor(f)}
-              hint={f === 'live_snapshot_path'
-                ? 'Usually the sub-stream: smaller frames let the monitor page refresh faster without disturbing recognition. Empty uses the path above.'
-                : undefined}
+              hint={f === 'live_snapshot_path' ? t('cameraForm.livePathHint') : undefined}
             >
               <input id={`camera-${f}`} className={`${inputClass} font-mono text-xs`} value={values[f]}
                 placeholder={presets[values.vendor]?.[f] || ''} onChange={(e) => set(f, e.target.value)} />
@@ -287,29 +293,28 @@ export default function CameraForm({
         </div>
 
         <div className="flex flex-wrap gap-6">
-          <Checkbox id="camera-prefer-snapshot" label="Prefer snapshots over RTSP" checked={values.prefer_snapshot}
-            onChange={(v) => set('prefer_snapshot', v)}
-            hint="Snapshots are sharp and need no decoding, but cost the camera one request per frame — many refuse above 2/s. Turn this off to read the RTSP stream instead, which costs one connection at any frame rate." />
-          <Checkbox id="camera-enabled" label="Enabled" checked={values.is_enabled} onChange={(v) => set('is_enabled', v)} />
+          <Checkbox id="camera-prefer-snapshot" label={t('cameraForm.preferSnapshot')} checked={values.prefer_snapshot}
+            onChange={(v) => set('prefer_snapshot', v)} hint={t('cameraForm.preferSnapshotHint')} />
+          <Checkbox id="camera-enabled" label={t('cameraForm.enabled')} checked={values.is_enabled} onChange={(v) => set('is_enabled', v)} />
         </div>
 
         <div>
           <button type="button" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced}
             className="text-sm text-purple-600 dark:text-purple-400 hover:underline">
-            {advanced ? '▾' : '▸'} Advanced: trigger tuning
+            {advanced ? '▾' : '▸'} {t('cameraForm.advanced')}
           </button>
           {advanced && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
-              <Field label="Motion threshold" htmlFor="camera-motion_threshold" error={errorFor('motion_threshold')}
-                hint="Fraction of the zone that must change (0–1)">
+              <Field label={t('cameraForm.motionThreshold')} htmlFor="camera-motion_threshold" error={errorFor('motion_threshold')}
+                hint={t('cameraForm.motionThresholdHint')}>
                 {numberInput('motion_threshold', { step: '0.005', min: '0', max: '1' })}
               </Field>
-              <Field label="Settle time (ms)" htmlFor="camera-settle_ms" error={errorFor('settle_ms')}
-                hint="Still for this long before reading">
+              <Field label={t('cameraForm.settle')} htmlFor="camera-settle_ms" error={errorFor('settle_ms')}
+                hint={t('cameraForm.settleHint')}>
                 {numberInput('settle_ms', { step: '100', min: '0' })}
               </Field>
-              <Field label="Cooldown (s)" htmlFor="camera-cooldown_s" error={errorFor('cooldown_s')}
-                hint="Before re-reading a denied vehicle">
+              <Field label={t('cameraForm.cooldown')} htmlFor="camera-cooldown_s" error={errorFor('cooldown_s')}
+                hint={t('cameraForm.cooldownHint')}>
                 {numberInput('cooldown_s', { min: '0' })}
               </Field>
             </div>
@@ -317,35 +322,35 @@ export default function CameraForm({
         </div>
 
         <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-          {onCancel && <button type="button" className={secondaryButton} onClick={onCancel}>Cancel</button>}
+          {onCancel && <button type="button" className={secondaryButton} onClick={onCancel}>{t('common.cancel')}</button>}
           <button type="button" className={secondaryButton} onClick={runTest} disabled={test.state === 'testing'}>
-            {test.state === 'testing' ? 'Testing…' : 'Test connection'}
+            {t(test.state === 'testing' ? 'cameraForm.testing' : 'cameraForm.test')}
           </button>
           <button type="submit" className={primaryButton} disabled={saving}>
-            {saving ? 'Saving…' : camera ? 'Save camera' : 'Add camera'}
+            {saving ? t('common.saving') : t(camera ? 'cameraForm.submitEdit' : 'cameraForm.submitNew')}
           </button>
         </div>
       </div>
 
       <div className={`${cardClass} p-5 space-y-4`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold">Preview and read zone</h2>
+          <h2 className="font-semibold">{t('cameraForm.preview')}</h2>
           {canGoLive && (
             <button type="button" onClick={() => setLive(!live)}
               className="text-sm text-purple-600 dark:text-purple-400 hover:underline">
-              {live ? 'Use the test snapshot' : 'Use the live view'}
+              {t(live ? 'cameraForm.useStill' : 'cameraForm.useLive')}
             </button>
           )}
           {snapshot && (
             <button type="button" className="text-sm text-purple-600 dark:text-purple-400 hover:underline" onClick={() => setRoiEditing(!roiEditing)}>
-              {roiEditing ? 'Done' : 'Edit read zone'}
+              {t(roiEditing ? 'cameraForm.doneZone' : 'cameraForm.editZone')}
             </button>
           )}
         </div>
 
         {test.state === 'idle' && (
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Run <strong>Test connection</strong> to check the camera and get a snapshot{canGoLive ? ', or switch to the live view' : ''}. The read zone is drawn on it.
+            {t('cameraForm.previewHint')}
           </p>
         )}
         {test.state === 'testing' && (
@@ -354,7 +359,7 @@ export default function CameraForm({
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            Contacting the camera (up to 10 seconds)…
+            {t('cameraForm.contacting')}
           </div>
         )}
         {test.state === 'error' && <Alert>{test.message}</Alert>}
@@ -365,16 +370,12 @@ export default function CameraForm({
             <RoiPicker image={snapshot} roi={values.roi} onChange={(roi) => set('roi', roi)}
               editing={roiEditing} onDraggingChange={setDragging} />
             {roiEditing && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Drag a rectangle around the spot where the plate is when a vehicle stops at the barrier — not the whole
-                yard. A zone that covers other lanes, pedestrians or parked vehicles never reads as empty, and an
-                arriving vehicle is then taken for the one already there. Save the camera to apply it.
-              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('cameraForm.zoneHint')}</p>
             )}
           </>
         ) : values.roi ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Read zone: x {values.roi.x} · y {values.roi.y} · w {values.roi.w} · h {values.roi.h}. Test the connection to see it on the image.
+            {t('cameraForm.zoneSaved', { x: values.roi.x, y: values.roi.y, w: values.roi.w, h: values.roi.h })}
           </p>
         ) : null}
         {serverErrors.roi?.length ? <Alert>{serverErrors.roi.join(' ')}</Alert> : null}

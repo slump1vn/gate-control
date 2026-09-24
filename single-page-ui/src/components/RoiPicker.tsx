@@ -2,6 +2,7 @@
 
 import { PointerEvent, useRef, useState } from 'react';
 import type { Roi } from '@/lib/gate-api';
+import { useI18n } from './I18nContext';
 
 interface RoiPickerProps {
   /** Camera snapshot to draw on (data: URL from the connection test). */
@@ -24,6 +25,7 @@ const round = (v: number) => Math.round(v * 1000) / 1000;
  * fractions of the frame (0–1), independent of the stream resolution.
  */
 export default function RoiPicker({ image, roi, onChange, editing = true, onDraggingChange }: RoiPickerProps) {
+  const { t } = useI18n();
   const box = useRef<HTMLDivElement>(null);
   const [start, setStart] = useState<{ x: number; y: number } | null>(null);
   const [draft, setDraft] = useState<Roi | null>(null);
@@ -75,7 +77,7 @@ export default function RoiPicker({ image, roi, onChange, editing = true, onDrag
         onPointerUp={onUp}
         onPointerCancel={() => { setStart(null); setDraft(null); onDraggingChange?.(false); }}
         role={editing ? 'application' : undefined}
-        aria-label={editing ? 'Drag on the image to set the read zone' : 'Camera snapshot with read zone'}
+        aria-label={t(editing ? 'roi.dragLabel' : 'roi.snapshotLabel')}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- data: URL from the camera test */}
         <img src={image} alt="Camera snapshot" draggable={false} className="block w-full h-auto" />
@@ -88,7 +90,7 @@ export default function RoiPicker({ image, roi, onChange, editing = true, onDrag
               boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.45)',
             }}
           >
-            <span className="absolute -top-6 left-0 text-xs bg-yellow-400 text-black px-1 rounded">Read zone</span>
+            <span className="absolute -top-6 left-0 text-xs bg-yellow-400 text-black px-1 rounded">{t('roi.readZone')}</span>
           </div>
         )}
       </div>
@@ -96,11 +98,11 @@ export default function RoiPicker({ image, roi, onChange, editing = true, onDrag
         <span>
           {roi
             ? `x ${roi.x} · y ${roi.y} · w ${roi.w} · h ${roi.h}`
-            : 'No read zone: the whole frame is used.'}
+            : t('roi.noZone')}
         </span>
         {editing && roi && (
           <button type="button" onClick={() => onChange(null)} className="text-purple-600 dark:text-purple-400 hover:underline">
-            Reset to whole frame
+            {t('roi.reset')}
           </button>
         )}
       </div>

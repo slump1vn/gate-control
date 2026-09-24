@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Roi } from '@/lib/gate-api';
 import { cameraSnapshotError, cameraSnapshotPath } from '@/lib/gate-api';
+import { useI18n } from './I18nContext';
 import { Badge } from './ui';
 
 interface LiveCameraViewProps {
@@ -29,6 +30,7 @@ const ERROR_BACKOFF_MS = 3000;
 export default function LiveCameraView({
   cameraId, apiBase, intervalMs, roi, showRoi = true, initialSrc, errorLookup = cameraSnapshotError,
 }: LiveCameraViewProps) {
+  const { t } = useI18n();
   const [src, setSrc] = useState<string | null>(initialSrc ?? null);
   const [error, setError] = useState<string | null>(null);
   // True when no frame has arrived for a while: the camera or the agent is stuck.
@@ -91,28 +93,26 @@ export default function LiveCameraView({
           className="absolute border-2 border-yellow-400 pointer-events-none"
           style={{ left: `${roi.x * 100}%`, top: `${roi.y * 100}%`, width: `${roi.w * 100}%`, height: `${roi.h * 100}%` }}
         >
-          <span className="absolute -top-5 left-0 text-[10px] bg-yellow-400 text-black px-1 rounded">Read zone</span>
+          <span className="absolute -top-5 left-0 text-[10px] bg-yellow-400 text-black px-1 rounded">{t('roi.readZone')}</span>
         </div>
       )}
 
       {intervalMs <= 0 && !src && (
-        <p className="text-sm text-gray-400">Live view paused</p>
+        <p className="text-sm text-gray-400">{t('live.paused')}</p>
       )}
 
       {error && (
         <div className="absolute inset-x-0 bottom-0 p-2 bg-red-900/80 text-red-100 text-xs">
           {error}
           {/HTTP 5\d\d|timed out/i.test(error) && (
-            <span className="block text-red-200/80">
-              The camera is refusing snapshots. It also serves the gate agent — try a slower refresh.
-            </span>
+            <span className="block text-red-200/80">{t('live.cameraRefusing')}</span>
           )}
         </div>
       )}
 
       {!error && src && (
         <div className="absolute top-2 right-2">
-          <Badge color={stale ? 'yellow' : 'green'}>{stale ? 'No new frame' : 'Live'}</Badge>
+          <Badge color={stale ? 'yellow' : 'green'}>{t(stale ? 'live.stale' : 'live.live')}</Badge>
         </div>
       )}
     </div>

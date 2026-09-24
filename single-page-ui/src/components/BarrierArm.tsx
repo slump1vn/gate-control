@@ -1,11 +1,15 @@
-import type { ArmState } from '@/lib/gate-api';
+'use client';
 
-const ARM_LABELS: Record<ArmState, string> = {
-  up: 'Open',
-  down: 'Closed',
-  moving: 'Moving',
-  stopped: 'Stopped',
-  unknown: 'Unknown',
+import type { ArmState } from '@/lib/gate-api';
+import { useI18n } from './I18nContext';
+import type { Dictionary } from '@/lib/i18n/dictionaries';
+
+const ARM_LABELS: Record<ArmState, keyof Dictionary> = {
+  up: 'gate.armUp',
+  down: 'gate.armDown',
+  moving: 'gate.armMoving',
+  stopped: 'gate.armStopped',
+  unknown: 'gate.armUnknown',
 };
 
 /** Arm angle from the simulator's position (0 closed … 1 open) or the reported state. */
@@ -18,9 +22,10 @@ function armPosition(state: ArmState | null, position?: number | null): number |
 }
 
 export default function BarrierArm({ state, position, size = 160 }: { state: ArmState | null; position?: number | null; size?: number }) {
+  const { t } = useI18n();
   const pos = armPosition(state, position);
   const angle = -80 * (pos ?? 0);
-  const label = state ? ARM_LABELS[state] : 'No feedback';
+  const label = t(state ? ARM_LABELS[state] : 'gate.noFeedback');
   return (
     <figure className="flex flex-col items-center" aria-label={`Barrier arm: ${label}`}>
       <svg width={size} height={size * 0.6} viewBox="0 0 200 120" role="img" aria-hidden="true">

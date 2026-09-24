@@ -117,6 +117,20 @@ def frame_on_disk(image, field):
         return False
 
 
+def event_frames(e, evidence):
+    """The event's kept frames, evidence first, skipping any whose file is gone."""
+    frames = []
+    for image in e.frames.all():
+        if frame_on_disk(image, 'original_image'):
+            frames.append({
+                'id': image.id,
+                'is_evidence': evidence is not None and image.id == evidence.id,
+                'has_processed_image': frame_on_disk(image, 'processed_image'),
+            })
+    frames.sort(key=lambda f: (not f['is_evidence'], f['id']))
+    return frames
+
+
 def serialize_event(e):
     image = e.uploaded_image
     return {
@@ -147,6 +161,8 @@ def serialize_event(e):
         'has_processed_image': frame_on_disk(image, 'processed_image'),
         # A record with no file left: the media directory lost it
         'frame_lost': bool(image) and not frame_on_disk(image, 'original_image'),
+        # Every frame of the burst that was kept, evidence first
+        'frames': event_frames(e, image),
     }
 
 

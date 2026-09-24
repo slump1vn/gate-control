@@ -1,9 +1,13 @@
-import type { TriggerReadout as Readout } from '@/lib/gate-api';
+'use client';
 
-const STATE_LABELS: Record<string, string> = {
-  idle: 'Lane empty',
-  motion: 'Something moving',
-  occupied: 'Vehicle in the zone',
+import type { TriggerReadout as Readout } from '@/lib/gate-api';
+import { useI18n } from './I18nContext';
+import type { Dictionary } from '@/lib/i18n/dictionaries';
+
+const STATE_LABELS: Record<string, keyof Dictionary> = {
+  idle: 'trigger.idle',
+  motion: 'trigger.motion',
+  occupied: 'trigger.occupied',
 };
 
 function Score({ label, value, threshold }: { label: string; value: number; threshold: number }) {
@@ -31,22 +35,23 @@ function Score({ label, value, threshold }: { label: string; value: number; thre
  * threshold means the read zone is wrong or the vehicle fills too little of it.
  */
 export default function TriggerReadout({ readout }: { readout: Readout | null | undefined }) {
+  const { t } = useI18n();
   if (!readout) {
-    return <p className="text-xs text-gray-500 dark:text-gray-400">The agent has not reported this camera yet.</p>;
+    return <p className="text-xs text-gray-500 dark:text-gray-400">{t('trigger.notReported')}</p>;
   }
   return (
     <div className="text-xs space-y-1">
       <div className="flex flex-wrap items-center gap-2 text-gray-600 dark:text-gray-300">
-        <span>{STATE_LABELS[readout.state ?? ''] ?? 'Unknown'}</span>
+        <span>{t(STATE_LABELS[readout.state ?? ''] ?? 'trigger.unknown')}</span>
         {typeof readout.fps === 'number' && (
-          <span className="text-gray-500 dark:text-gray-400">· {readout.fps.toFixed(1)} frames/s</span>
+          <span className="text-gray-500 dark:text-gray-400">· {t('trigger.fps', { n: readout.fps.toFixed(1) })}</span>
         )}
       </div>
       {typeof readout.motion === 'number' && typeof readout.motion_threshold === 'number' && (
-        <Score label="Motion" value={readout.motion} threshold={readout.motion_threshold} />
+        <Score label={t('trigger.motionScore')} value={readout.motion} threshold={readout.motion_threshold} />
       )}
       {typeof readout.presence === 'number' && typeof readout.presence_threshold === 'number' && (
-        <Score label="Presence" value={readout.presence} threshold={readout.presence_threshold} />
+        <Score label={t('trigger.presenceScore')} value={readout.presence} threshold={readout.presence_threshold} />
       )}
     </div>
   );

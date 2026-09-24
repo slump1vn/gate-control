@@ -324,8 +324,13 @@ def api_gate_status(request):
 @require_http_methods(["GET"])
 @require_gate_operator
 def api_gate_event_image(request, event_id, image_type):
+    """The event's evidence frame, or with ?frame=<id> one of its other frames."""
     event = AccessEvent.objects.select_related('uploaded_image').filter(pk=event_id).first()
     image = event.uploaded_image if event else None
+    frame_id = request.GET.get('frame', '')
+    if event is not None and frame_id.isdigit():
+        # Only frames of this event: an id from elsewhere must not be served
+        image = event.frames.filter(pk=int(frame_id)).first()
     field = None
     if image is not None:
         field = image.original_image if image_type == 'original' else image.processed_image if image_type == 'processed' else None

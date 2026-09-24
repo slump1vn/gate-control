@@ -206,6 +206,12 @@ GATE_MIN_CONFIDENCE = config('GATE_MIN_CONFIDENCE', default=0.80, cast=float)
 GATE_DECIDE_TIMEOUT = config('GATE_DECIDE_TIMEOUT', default=8, cast=int)
 GATE_WORKER_THREADS = config('GATE_WORKER_THREADS', default=3, cast=int)
 GATE_COMMAND_TTL_SECONDS = config('GATE_COMMAND_TTL_SECONDS', default=15, cast=int)
+# Which frames of a burst survive the decision. 'evidence' keeps the one the
+# plate was read from and deletes the rest on the spot; 'denied' also keeps the
+# whole burst when the barrier stayed shut, which is what you want to look at
+# when a plate was misread; 'all' keeps every frame of every decision.
+GATE_KEEP_FRAMES = config('GATE_KEEP_FRAMES', default='evidence', cast=str)
+
 GATE_EVENT_RETENTION_DAYS = config('GATE_EVENT_RETENTION_DAYS', default=90, cast=int)
 GATE_AUTO_CLOSE = config('GATE_AUTO_CLOSE', default='controller')  # controller | software
 GATE_AUTO_CLOSE_SECONDS = config('GATE_AUTO_CLOSE_SECONDS', default=10, cast=int)

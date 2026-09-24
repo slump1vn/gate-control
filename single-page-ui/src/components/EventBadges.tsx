@@ -1,5 +1,8 @@
+'use client';
+
 import type { AccessEvent } from '@/lib/gate-api';
-import { REASONS } from '@/lib/gate-api';
+import { useI18n } from './I18nContext';
+import type { Dictionary } from '@/lib/i18n/dictionaries';
 import { Badge, BadgeColor } from './ui';
 
 const DECISION_COLORS: Record<string, BadgeColor> = {
@@ -9,20 +12,24 @@ const DECISION_COLORS: Record<string, BadgeColor> = {
 };
 
 export function DecisionBadge({ decision }: { decision: string }) {
-  return <Badge color={DECISION_COLORS[decision] ?? 'gray'}>{decision.charAt(0).toUpperCase() + decision.slice(1)}</Badge>;
+  const { t } = useI18n();
+  return <Badge color={DECISION_COLORS[decision] ?? 'gray'}>{t(`decision.${decision}` as keyof Dictionary)}</Badge>;
 }
 
-export function reasonLabel(event: Pick<AccessEvent, 'reason' | 'reason_display'>): string {
-  return event.reason_display || REASONS[event.reason] || event.reason;
+/** The service also sends its own wording; the dictionary wins so the page is in one language. */
+export function useReasonLabel() {
+  const { t } = useI18n();
+  return (event: Pick<AccessEvent, 'reason' | 'reason_display'>) => {
+    const key = `reason.${event.reason}` as keyof Dictionary;
+    const translated = t(key);
+    return translated === key ? (event.reason_display || event.reason) : translated;
+  };
 }
 
-const NOT_SENT_LABELS: Record<string, string> = {
-  not_sent_shadow_mode: 'not sent (shadow mode)',
-  not_sent_test: 'not sent (test)',
-  not_sent_agent_mode: 'not sent (agent in shadow)',
-  not_sent_cli_real_controller: 'not sent (CLI)',
-  expired: 'expired, not sent',
-};
+const NOT_SENT = new Set([
+  'not_sent_shadow_mode', 'not_sent_test', 'not_sent_agent_mode',
+  'not_sent_cli_real_controller', 'expired',
+]);
 
 /**
  * Whether the command reached the barrier, in words. command_result is empty
@@ -30,22 +37,23 @@ const NOT_SENT_LABELS: Record<string, string> = {
  * reply (sent) or the failure (not sent).
  */
 export function CommandBadge({ event }: { event: Pick<AccessEvent, 'command' | 'command_sent' | 'command_result'> }) {
+  const { t } = useI18n();
   if (!event.command) return <span className="text-gray-400">—</span>;
   const result = event.command_result;
   let color: BadgeColor;
   let label: string;
   if (event.command_sent) {
     color = 'green';
-    label = result ? `sent (${result})` : 'sent';
+    label = result ? t('command.sentWith', { result }) : t('command.sent');
   } else if (!result || result === 'dispatched') {
     color = 'yellow';
-    label = result ? 'dispatched' : 'queued';
-  } else if (NOT_SENT_LABELS[result]) {
+    label = t(result ? 'command.dispatched' : 'command.queued');
+  } else if (NOT_SENT.has(result)) {
     color = 'gray';
-    label = NOT_SENT_LABELS[result];
+    label = t(`command.${result}` as keyof Dictionary);
   } else {
     color = 'red';
-    label = `failed: ${result}`;
+    label = t('command.failed', { result });
   }
   return <Badge color={color} title={result}>{event.command} — {label}</Badge>;
 }

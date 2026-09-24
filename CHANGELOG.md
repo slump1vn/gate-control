@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Vietnamese interface, and a VI/EN switch in the navigation bar. Every operator and admin page is translated; the choice is remembered in the browser and the interface opens in Vietnamese by default
+- `GATE_KEEP_FRAMES` (`evidence` by default, or `denied` / `all`): a decision's other burst frames can be kept instead of discarded, so a vehicle that was denied can be reviewed frame by frame. The kept frames are listed on the event and purged with it
 - `PUBLIC_UPLOAD_ENABLED` (default off): the manual upload-and-recognise tool, the image list and the downloads need a login, and the home page shows a sign-in card to anonymous visitors instead of the upload form. An internet-facing gate deployment should not hand its model to strangers; turn it on to keep the old public demo behaviour, which the canary service needs
 - The read zone can be drawn on the camera's live view, not only on a still from the connection test, so a zone can be aimed while a vehicle drives in
 - The agent reports what its trigger sees (state, frame rate, motion and presence against their thresholds), shown under each live view on `/monitor` and on the camera page, and exported as `lpr_gate_agent_motion` / `lpr_gate_agent_presence`. When a vehicle arrives and no event appears, this says whether it was noticed at all
@@ -21,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SPA gate pages: login with role-aware navigation, `/gate` status panel with barrier arm and emergency STOP, `/vehicles` registry with live plate normalisation, `/events` log with frame thumbnails and "open anyway", and for admins `/manage/cameras` (connection test, read-zone picker, change history) and `/manage/gates`
 
 ### Fixed
+- The navigation bar no longer overflows a phone screen: the product name shrinks and truncates rather than pushing the controls off the edge
 - The event log claimed a frame it could not show when the file had gone from the media directory; it now checks the file and distinguishes "no frame" (nothing could be read) from "frame missing" (the file is gone)
 - `USE_X_FORWARDED_PROTO` lets Django trust a TLS-terminating proxy's `X-Forwarded-Proto`, so an HTTPS site is not treated as insecure and absolute URLs are built with the right scheme; `DOCKER_DEPLOYMENT.md` now carries a worked reverse-proxy configuration
 - A request the browser could not make at all reported the bare "Failed to fetch"; it now names the address it tried and what to check
@@ -42,6 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The product is named **VietinBankSchool LPR** in the interface, the Django admin and the current documentation. Technical identifiers keep their names: the `openlpr-network` Docker network, container names, image names, the `lpr_*` metrics and every environment variable. Past release notes keep the name each release shipped under
 - All Compose files take their images from `LPR_IMAGE_PREFIX` (default `ghcr.io/slump1vn/gate-control`)
 - `retry_stuck_images` skips gate camera frames; the image list, detail and download endpoints no longer serve them
+
+### Removed
+- The "Demo System" banner, which a working gate installation has no use for
 
 ## [1.4.0] - 2026-06-02
 

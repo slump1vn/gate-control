@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import type { AccessEvent } from '@/lib/gate-api';
-import { DIRECTION_LABELS, eventImagePath } from '@/lib/gate-api';
-import { CommandBadge, ConfidenceText, DecisionBadge, reasonLabel } from './EventBadges';
+import { eventImagePath } from '@/lib/gate-api';
+import { CommandBadge, ConfidenceText, DecisionBadge, useReasonLabel } from './EventBadges';
+import { useI18n } from './I18nContext';
+import type { Dictionary } from '@/lib/i18n/dictionaries';
 import { Badge, formatDateTime } from './ui';
 
 interface EventTableProps {
@@ -20,18 +22,17 @@ export function canOpenAnyway(e: AccessEvent): boolean {
 }
 
 function Thumbnail({ event, apiBase, onPreview }: { event: AccessEvent; apiBase: string; onPreview?: EventTableProps['onPreview'] }) {
+  const { t } = useI18n();
   const [failed, setFailed] = useState(false);
   if (!event.has_image || failed) {
     // Two different faults: nothing was kept, or what was kept is gone
     const lost = event.frame_lost || failed;
     return (
       <div
-        title={lost
-          ? 'The frame was kept for this event but its file is missing from the media directory.'
-          : 'No frame was kept: no frame of this burst could be read.'}
+        title={t(lost ? 'events.frameMissingHint' : 'events.noFrameHint')}
         className="w-24 h-16 rounded bg-gray-100 dark:bg-[#2d2d2d] flex items-center justify-center text-center text-xs text-gray-400 px-1"
       >
-        {lost ? 'frame missing' : 'no frame'}
+        {t(lost ? 'events.frameMissing' : 'events.noFrame')}
       </div>
     );
   }
@@ -48,17 +49,19 @@ function Thumbnail({ event, apiBase, onPreview }: { event: AccessEvent; apiBase:
 }
 
 export default function EventTable({ events, apiBase, onOpenAnyway, onPreview }: EventTableProps) {
+  const { t } = useI18n();
+  const reasonLabel = useReasonLabel();
   return (
     <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-xl">
       <table className="min-w-full text-sm">
         <thead className="bg-gray-50 dark:bg-[#1a1a1a] text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
           <tr>
-            <th className="px-3 py-3">Frame</th>
-            <th className="px-3 py-3">Time / gate</th>
-            <th className="px-3 py-3">Plate</th>
-            <th className="px-3 py-3">Decision</th>
-            <th className="px-3 py-3 hidden lg:table-cell">Barrier</th>
-            <th className="px-3 py-3 text-right"><span className="sr-only">Actions</span></th>
+            <th className="px-3 py-3">{t('events.frame')}</th>
+            <th className="px-3 py-3">{t('events.timeGate')}</th>
+            <th className="px-3 py-3">{t('vehicles.plate')}</th>
+            <th className="px-3 py-3">{t('events.decision')}</th>
+            <th className="px-3 py-3 hidden lg:table-cell">{t('events.barrier')}</th>
+            <th className="px-3 py-3 text-right"><span className="sr-only">{t('vehicles.actions')}</span></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -69,9 +72,13 @@ export default function EventTable({ events, apiBase, onOpenAnyway, onPreview }:
                 <div className="whitespace-nowrap">{formatDateTime(e.timestamp)}</div>
                 <div className="text-xs text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-1">
                   <span>{e.gate?.name ?? '—'}</span>
-                  {e.direction && <Badge color={e.direction === 'in' ? 'blue' : 'purple'}>{DIRECTION_LABELS[e.direction]}</Badge>}
+                  {e.direction && (
+                    <Badge color={e.direction === 'in' ? 'blue' : 'purple'}>
+                      {t(`gate.${e.direction === 'in' ? 'entry' : 'exit'}` as keyof Dictionary)}
+                    </Badge>
+                  )}
                   {e.camera && <span className="truncate max-w-[8rem]">{e.camera.name}</span>}
-                  {e.is_test && <Badge color="purple">test</Badge>}
+                  {e.is_test && <Badge color="purple">{t('events.test')}</Badge>}
                 </div>
               </td>
               <td className="px-3 py-2">
@@ -80,7 +87,7 @@ export default function EventTable({ events, apiBase, onOpenAnyway, onPreview }:
                     <div className="font-mono font-semibold">{e.plate_normalized || e.plate_raw || '—'}</div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">
                       <ConfidenceText value={e.confidence} />
-                      {e.frames_read > 0 && <> · {e.frames_agreed}/{e.frames_read} frames</>}
+                      {e.frames_read > 0 && <> · {t('events.framesRead', { agreed: e.frames_agreed, read: e.frames_read })}</>}
                     </div>
                   </>
                 )}
@@ -92,8 +99,12 @@ export default function EventTable({ events, apiBase, onOpenAnyway, onPreview }:
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   {e.vehicle && <>{e.vehicle.owner_name} ({e.vehicle.plate_display})</>}
-                  {e.near_miss_vehicle && <span className="text-yellow-700 dark:text-yellow-400">Close to {e.near_miss_vehicle.plate_display} ({e.near_miss_vehicle.owner_name})</span>}
-                  {e.operator && <>by {e.operator}</>}
+                  {e.near_miss_vehicle && (
+                    <span className="text-yellow-700 dark:text-yellow-400">
+                      {t('events.closeTo', { plate: e.near_miss_vehicle.plate_display, owner: e.near_miss_vehicle.owner_name })}
+                    </span>
+                  )}
+                  {e.operator && <>{t('events.by', { user: e.operator })}</>}
                 </div>
               </td>
               <td className="px-3 py-2 hidden lg:table-cell"><CommandBadge event={e} /></td>
@@ -105,7 +116,7 @@ export default function EventTable({ events, apiBase, onOpenAnyway, onPreview }:
                       ? 'bg-yellow-500 text-white hover:bg-yellow-600'
                       : 'border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-[#2d2d2d]'}`}
                   >
-                    Open anyway
+                    {t('events.openAnyway')}
                   </button>
                 )}
               </td>

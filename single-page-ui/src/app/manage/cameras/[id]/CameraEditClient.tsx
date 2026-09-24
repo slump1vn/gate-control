@@ -12,12 +12,14 @@ import { usePolling } from '@/hooks/usePolling';
 import RequireRole from '@/components/RequireRole';
 import CameraForm from '@/components/CameraForm';
 import CameraStatusBadge from '@/components/CameraStatusBadge';
+import { useI18n } from '@/components/I18nContext';
 import TriggerReadout from '@/components/TriggerReadout';
 import ConfigChangeList from '@/components/ConfigChangeList';
 import Spinner from '@/components/Spinner';
 import { Alert, PageHeader, cardClass, formatDateTime } from '@/components/ui';
 
 function CameraEditContent() {
+  const { t } = useI18n();
   const params = useParams();
   const router = useRouter();
   const isNew = params.id === 'new';
@@ -60,7 +62,7 @@ function CameraEditContent() {
       const saved = await updateCamera(camera.id, data);
       setCamera(saved);
       setStatus(saved);
-      setNotice(`Saved. The gate agent picks up the change within 30 seconds (config version ${saved.config_version}).`);
+      setNotice(t('cameras.savedNote', { version: saved.config_version }));
       loadHistory(saved.id);
     } else {
       const saved = await createCamera(data);
@@ -71,12 +73,13 @@ function CameraEditContent() {
   const remove = async () => {
     if (!camera) return;
     const gates = camera.gates.map((g) => g.name).join(', ');
-    if (!window.confirm(`Delete camera "${camera.name}"?${gates ? `\n\nGates using it (${gates}) will have no camera.` : ''}`)) return;
+    const note = gates ? t('cameras.deleteGatesNote', { gates }) : '';
+    if (!window.confirm(t('cameras.confirmDelete', { name: camera.name, gates: note }))) return;
     try {
       await deleteCamera(camera.id);
       router.replace('/manage/cameras');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Delete failed');
+      setError(err instanceof Error ? err.message : t('vehicles.saveFailed'));
     }
   };
 
@@ -85,10 +88,10 @@ function CameraEditContent() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <Link href="/manage/cameras" className="text-sm text-purple-600 dark:text-purple-400 hover:underline">← Cameras</Link>
-      <PageHeader title={camera ? camera.name : 'Add camera'}>
+      <Link href="/manage/cameras" className="text-sm text-purple-600 dark:text-purple-400 hover:underline">← {t('cameras.title')}</Link>
+      <PageHeader title={camera ? camera.name : t('cameras.add')}>
         {camera && (
-          <button onClick={remove} className="text-sm text-red-600 dark:text-red-400 hover:underline">Delete camera</button>
+          <button onClick={remove} className="text-sm text-red-600 dark:text-red-400 hover:underline">{t('cameras.deleteCamera')}</button>
         )}
       </PageHeader>
 
@@ -100,22 +103,22 @@ function CameraEditContent() {
       {camera && status && (
         <div className={`${cardClass} p-4 mb-6 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm`}>
           <div>
-            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Agent</div>
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">{t('cameras.agent')}</div>
             <CameraStatusBadge status={status.agent_status} />
             {status.agent_status_at && <span className="ml-2 text-gray-500 dark:text-gray-400">{formatDateTime(status.agent_status_at)}</span>}
             <div className="mt-2"><TriggerReadout readout={status.agent_trigger} /></div>
           </div>
           <div>
-            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Last saved test</div>
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">{t('cameras.lastSavedTest')}</div>
             {status.last_test_at ? (
               <span className={status.last_test_ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-                {status.last_test_ok ? 'Passed' : `Failed${status.last_test_error ? `: ${status.last_test_error}` : ''}`} · {formatDateTime(status.last_test_at)}
+                {status.last_test_ok ? t('cameras.passed') : `${t('cameras.failed')}${status.last_test_error ? `: ${status.last_test_error}` : ''}`} · {formatDateTime(status.last_test_at)}
               </span>
-            ) : <span className="text-gray-400">never</span>}
+            ) : <span className="text-gray-400">{t('common.never')}</span>}
           </div>
           <div>
-            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Used by</div>
-            {camera.gates.map((g) => g.name).join(', ') || <span className="text-gray-400">no gate</span>}
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">{t('cameras.usedBy')}</div>
+            {camera.gates.map((g) => g.name).join(', ') || <span className="text-gray-400">{t('cameras.noGate')}</span>}
           </div>
         </div>
       )}
@@ -125,7 +128,7 @@ function CameraEditContent() {
 
       {camera && (
         <section className={`${cardClass} p-5 mt-6`}>
-          <h2 className="font-semibold mb-3">Change history</h2>
+          <h2 className="font-semibold mb-3">{t('cameras.changeHistory')}</h2>
           <ConfigChangeList changes={history} />
         </section>
       )}

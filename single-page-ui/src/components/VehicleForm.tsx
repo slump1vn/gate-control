@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { ApiError, previewPlate } from '@/lib/gate-api';
 import type { PlatePreview, Vehicle, VehicleInput } from '@/lib/gate-api';
+import { useI18n } from './I18nContext';
 import { Alert, Checkbox, Field, inputClass, isoToLocalInput, localInputToIso, primaryButton, secondaryButton } from './ui';
 
 interface VehicleFormProps {
@@ -26,6 +27,7 @@ const EMPTY: VehicleInput = {
 };
 
 export default function VehicleForm({ vehicle, onSubmit, onCancel, preview = previewPlate }: VehicleFormProps) {
+  const { t } = useI18n();
   const [data, setData] = useState<VehicleInput>(() => {
     if (!vehicle) return EMPTY;
     const keys = Object.keys(EMPTY) as (keyof VehicleInput)[];
@@ -62,7 +64,7 @@ export default function VehicleForm({ vehicle, onSubmit, onCancel, preview = pre
     setErrors({});
     setFormError('');
     if (validFrom && validUntil && validFrom >= validUntil) {
-      setErrors({ valid_until: ['Must be after "Valid from".'] });
+      setErrors({ valid_until: [t('vehicleForm.untilAfterFrom')] });
       return;
     }
     setSaving(true);
@@ -74,7 +76,7 @@ export default function VehicleForm({ vehicle, onSubmit, onCancel, preview = pre
         setErrors(fields);
         if (__all__) setFormError(__all__.join(' '));
       } else {
-        setFormError(err instanceof Error ? err.message : 'Save failed');
+        setFormError(err instanceof Error ? err.message : t('vehicles.saveFailed'));
       }
     } finally {
       setSaving(false);
@@ -86,55 +88,57 @@ export default function VehicleForm({ vehicle, onSubmit, onCancel, preview = pre
       {formError && <Alert>{formError}</Alert>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field
-          label="Plate number"
+          label={t('vehicleForm.plate')}
           htmlFor="vehicle-plate"
           error={errors.plate_display}
           hint={shownPreview?.normalized
-            ? <>Stored and matched as <span className="font-mono font-semibold text-gray-800 dark:text-gray-200">{shownPreview.normalized}</span></>
-            : 'e.g. 30A-123.45 or 29B1 234.56'}
+            ? <>{t('vehicleForm.storedAs')} <span className="font-mono font-semibold text-gray-800 dark:text-gray-200">{shownPreview.normalized}</span></>
+            : t('vehicleForm.plateHint')}
         >
           <input id="vehicle-plate" className={`${inputClass} font-mono`} required autoFocus
             value={data.plate_display} onChange={(e) => set('plate_display', e.target.value.toUpperCase())} />
           {duplicate && (
             <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-400">
-              Already registered as {duplicate.plate_display}.
+              {t('vehicleForm.duplicate', { plate: duplicate.plate_display })}
             </p>
           )}
         </Field>
-        <Field label="Vehicle type" htmlFor="vehicle-type" error={errors.vehicle_type}>
+        <Field label={t('vehicleForm.type')} htmlFor="vehicle-type" error={errors.vehicle_type}>
           <select id="vehicle-type" className={inputClass} value={data.vehicle_type}
             onChange={(e) => set('vehicle_type', e.target.value as VehicleInput['vehicle_type'])}>
-            <option value="car">Car</option>
-            <option value="motorbike">Motorbike</option>
-            <option value="other">Other</option>
+            <option value="car">{t('vehicleForm.car')}</option>
+            <option value="motorbike">{t('vehicleForm.motorbike')}</option>
+            <option value="other">{t('vehicleForm.other')}</option>
           </select>
         </Field>
-        <Field label="Owner" htmlFor="vehicle-owner" error={errors.owner_name}>
+        <Field label={t('vehicles.owner')} htmlFor="vehicle-owner" error={errors.owner_name}>
           <input id="vehicle-owner" className={inputClass} required value={data.owner_name} onChange={(e) => set('owner_name', e.target.value)} />
         </Field>
-        <Field label="Phone" htmlFor="vehicle-phone" error={errors.owner_phone}>
+        <Field label={t('vehicleForm.phone')} htmlFor="vehicle-phone" error={errors.owner_phone}>
           <input id="vehicle-phone" className={inputClass} type="tel" value={data.owner_phone} onChange={(e) => set('owner_phone', e.target.value)} />
         </Field>
-        <Field label="Department" htmlFor="vehicle-department" error={errors.department}>
+        <Field label={t('vehicles.department')} htmlFor="vehicle-department" error={errors.department}>
           <input id="vehicle-department" className={inputClass} value={data.department} onChange={(e) => set('department', e.target.value)} />
         </Field>
         <div className="flex items-end pb-2">
-          <Checkbox id="vehicle-active" label="Active" checked={data.is_active} onChange={(v) => set('is_active', v)}
-            hint="Inactive vehicles are recognised but never let in." />
+          <Checkbox id="vehicle-active" label={t('vehicles.active')} checked={data.is_active} onChange={(v) => set('is_active', v)}
+            hint={t('vehicleForm.activeHint')} />
         </div>
-        <Field label="Valid from" htmlFor="vehicle-from" error={errors.valid_from} hint="Empty = no start date">
+        <Field label={t('vehicleForm.validFrom')} htmlFor="vehicle-from" error={errors.valid_from} hint={t('vehicleForm.validFromHint')}>
           <input id="vehicle-from" type="datetime-local" className={inputClass} value={validFrom} onChange={(e) => setValidFrom(e.target.value)} />
         </Field>
-        <Field label="Valid until" htmlFor="vehicle-until" error={errors.valid_until} hint="Empty = no end date">
+        <Field label={t('vehicleForm.validUntil')} htmlFor="vehicle-until" error={errors.valid_until} hint={t('vehicleForm.validUntilHint')}>
           <input id="vehicle-until" type="datetime-local" className={inputClass} value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
         </Field>
       </div>
-      <Field label="Notes" htmlFor="vehicle-notes" error={errors.notes}>
+      <Field label={t('vehicleForm.notes')} htmlFor="vehicle-notes" error={errors.notes}>
         <textarea id="vehicle-notes" rows={2} className={inputClass} value={data.notes} onChange={(e) => set('notes', e.target.value)} />
       </Field>
       <div className="flex justify-end gap-2">
-        <button type="button" className={secondaryButton} onClick={onCancel}>Cancel</button>
-        <button type="submit" className={primaryButton} disabled={saving}>{saving ? 'Saving…' : vehicle ? 'Save changes' : 'Add vehicle'}</button>
+        <button type="button" className={secondaryButton} onClick={onCancel}>{t('common.cancel')}</button>
+        <button type="submit" className={primaryButton} disabled={saving}>
+          {saving ? t('common.saving') : t(vehicle ? 'vehicleForm.submitEdit' : 'vehicleForm.submitNew')}
+        </button>
       </div>
     </form>
   );
