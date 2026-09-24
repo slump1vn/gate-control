@@ -37,17 +37,18 @@ export function Field({ label, htmlFor, error, hint, children }: {
   );
 }
 
-export function Checkbox({ id, label, checked, onChange, hint }: {
+export function Checkbox({ id, label, checked, onChange, hint, disabled }: {
   id: string;
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
   hint?: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <div>
-      <label htmlFor={id} className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-        <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 accent-purple-600" />
+      <label htmlFor={id} className={`inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 ${disabled ? 'opacity-60' : 'cursor-pointer'}`}>
+        <input id={id} type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 accent-purple-600" />
         {label}
       </label>
       {hint && <p className="mt-1 ml-6 text-xs text-gray-500 dark:text-gray-400">{hint}</p>}

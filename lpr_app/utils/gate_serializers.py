@@ -5,6 +5,8 @@ import os
 
 from django.http import JsonResponse
 
+from .auth import primary_role
+
 
 def iso(dt):
     return dt.isoformat() if dt else None
@@ -163,6 +165,19 @@ def serialize_event(e):
         'frame_lost': bool(image) and not frame_on_disk(image, 'original_image'),
         # Every frame of the burst that was kept, evidence first
         'frames': event_frames(e, image),
+    }
+
+
+def serialize_user(u):
+    return {
+        'id': u.id,
+        'username': u.username,
+        'email': u.email,
+        'role': primary_role(u),
+        'is_active': u.is_active,
+        'is_superuser': u.is_superuser,
+        'date_joined': iso(u.date_joined),
+        'last_login': iso(u.last_login),
     }
 
 

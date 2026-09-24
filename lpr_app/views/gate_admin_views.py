@@ -11,6 +11,7 @@ PUT and PATCH are both partial: omitted fields keep their current values.
 import base64
 import logging
 
+from django.contrib.auth.models import Group, User
 from django.db.models import Q
 from django.forms.models import model_to_dict
 from django.http import HttpResponse, JsonResponse
@@ -18,13 +19,13 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
-from ..forms import CameraForm, GateDeviceForm, VehicleForm
+from ..forms import CameraForm, GateDeviceForm, UserForm, VehicleForm
 from ..models import AccessEvent, Camera, GateCamera, GateConfigChange, GateDevice, Vehicle
 from ..services import barrier_simulator, camera_service, config_audit, gate_service
-from ..utils.auth import require_gate_admin, require_gate_operator
+from ..utils.auth import primary_role, require_gate_admin, require_gate_operator
 from ..utils.gate_serializers import (
     BadRequest, error, form_errors, json_body, paginate, serialize_camera,
-    serialize_config_change, serialize_event, serialize_gate, serialize_vehicle,
+    serialize_config_change, serialize_event, serialize_gate, serialize_user, serialize_vehicle,
 )
 from ..utils.plates import clean_plate, normalize_plate
 from ..utils.secrets import SecretDecryptError, SecretKeyMissing
@@ -32,7 +33,7 @@ from ..utils.secrets import SecretDecryptError, SecretKeyMissing
 logger = logging.getLogger(__name__)
 
 
-def _bound_form(form_class, body, instance=None, secret_field=None):
+def _bound_form(form_class, body, instance=None, extra_fields=()):
     """
     Build a form from a JSON body, merged over the instance's current values
     (or the model defaults, for a new instance).
@@ -40,7 +41,7 @@ def _bound_form(form_class, body, instance=None, secret_field=None):
     fields = form_class._meta.fields
     data = model_to_dict(instance, fields=fields) if instance is not None else {}
     for key, value in body.items():
-        if key in fields or key == secret_field:
+        if key in fields or key in extra_fields:
             data[key] = value
     if 'roi' in body:
         roi = body['roi'] or {}
@@ -70,7 +71,7 @@ def api_cameras(request):
     body, err = _parse(request)
     if err:
         return err
-    form = _bound_form(CameraForm, body, Camera(), secret_field='password')
+    form = _bound_form(CameraForm, body, Camera(), extra_fields=('password',))
     if not form.is_valid():
         return form_errors(form)
     camera = config_audit.save_camera(form.instance, request.user, password=form.cleaned_data.get('password'))
@@ -94,7 +95,7 @@ def api_camera_detail(request, camera_id):
     body, err = _parse(request)
     if err:
         return err
-    form = _bound_form(CameraForm, body, camera, secret_field='password')
+    form = _bound_form(CameraForm, body, camera, extra_fields=('password',))
     if not form.is_valid():
         return form_errors(form)
     camera = config_audit.save_camera(form.instance, request.user, password=form.cleaned_data.get('password'))
@@ -148,7 +149,7 @@ def api_camera_test(request):
 
     password = body.get('password') or ''
     overrides = {k for k in body if k != 'password'}
-    form = _bound_form(CameraForm, body, instance or Camera(), secret_field='password')
+    form = _bound_form(CameraForm, body, instance or Camera(), extra_fields=('password',))
     if not form.is_valid():
         return form_errors(form)
     candidate = form.instance
@@ -229,7 +230,7 @@ def api_gate_devices(request):
     body, err = _parse(request)
     if err:
         return err
-    form = _bound_form(GateDeviceForm, body, GateDevice(), secret_field='controller_token')
+    form = _bound_form(GateDeviceForm, body, GateDevice(), extra_fields=('controller_token',))
     if not form.is_valid():
         return form_errors(form)
     gate = config_audit.save_gate_device(form.instance, request.user, token=form.cleaned_data.get('controller_token'))
@@ -256,7 +257,7 @@ def api_gate_device_detail(request, gate_id):
     body, err = _parse(request)
     if err:
         return err
-    form = _bound_form(GateDeviceForm, body, gate, secret_field='controller_token')
+    form = _bound_form(GateDeviceForm, body, gate, extra_fields=('controller_token',))
     if not form.is_valid():
         return form_errors(form)
     gate = config_audit.save_gate_device(form.instance, request.user, token=form.cleaned_data.get('controller_token'))
@@ -479,3 +480,102 @@ def api_gate_simulator(request, gate_id):
     event.refresh_from_db()
     state = barrier_simulator.refresh(gate)
     return JsonResponse({'event': serialize_event(event), 'simulator': state})
+
+
+# ---------------------------------------------------------------------------
+# Users (gate_admin, gate_operator accounts)
+# ---------------------------------------------------------------------------
+
+def _set_role(user, role):
+    group = Group.objects.filter(name=role).first()
+    user.groups.set([group] if group else [])
+
+
+@require_http_methods(["GET", "POST"])
+@require_gate_admin
+def api_users(request):
+    if request.method == 'GET':
+        queryset = User.objects.all().order_by('username')
+        q = request.GET.get('q', '').strip()
+        if q:
+            queryset = queryset.filter(Q(username__icontains=q) | Q(email__icontains=q))
+        active = request.GET.get('is_active')
+        if active in ('true', 'false'):
+            queryset = queryset.filter(is_active=(active == 'true'))
+        try:
+            return paginate(request, queryset, serialize_user)
+        except BadRequest as exc:
+            return error(str(exc), 'INVALID_PARAMS')
+
+    body, err = _parse(request)
+    if err:
+        return err
+    form = _bound_form(UserForm, body, User(), extra_fields=('password', 'role'))
+    if not form.is_valid():
+        return form_errors(form)
+    user = form.save(commit=False)
+    user.set_password(form.cleaned_data['password'])
+    user.save()
+    _set_role(user, form.cleaned_data['role'])
+    config_audit.record_user_change(request.user, user, 'create', {
+        'username': user.username, 'email': user.email,
+        'role': form.cleaned_data['role'], 'is_active': user.is_active,
+    })
+    logger.info('User %s created by %s', user.username, request.user)
+    return JsonResponse(serialize_user(user), status=201)
+
+
+@require_http_methods(["GET", "PUT", "PATCH", "DELETE"])
+@require_gate_admin
+def api_user_detail(request, user_id):
+    user = User.objects.filter(pk=user_id).first()
+    if user is None:
+        return error('User not found', 'NOT_FOUND', status=404)
+
+    is_self = user.id == request.user.id
+
+    if request.method == 'GET':
+        return JsonResponse(serialize_user(user))
+
+    if request.method == 'DELETE':
+        if is_self:
+            return error('You cannot deactivate your own account', 'SELF_LOCKOUT', status=400)
+        user.is_active = False
+        user.save(update_fields=['is_active'])
+        config_audit.record_user_change(request.user, user, 'update', {'is_active': {'old': True, 'new': False}})
+        logger.info('User %s deactivated by %s', user.username, request.user)
+        return JsonResponse(serialize_user(user))
+
+    body, err = _parse(request)
+    if err:
+        return err
+    if is_self and body.get('is_active') is False:
+        return error('You cannot deactivate your own account', 'SELF_LOCKOUT', status=400)
+    if is_self and body.get('role') and body['role'] != 'gate_admin':
+        return error('You cannot remove your own admin role', 'SELF_LOCKOUT', status=400)
+
+    before_role, before_active, before_email = primary_role(user), user.is_active, user.email
+    body_for_form = dict(body)
+    body_for_form.setdefault('role', before_role or 'gate_operator')
+    form = _bound_form(UserForm, body_for_form, user, extra_fields=('password', 'role'))
+    if not form.is_valid():
+        return form_errors(form)
+    user = form.save(commit=False)
+    password_changed = bool(form.cleaned_data.get('password'))
+    if password_changed:
+        user.set_password(form.cleaned_data['password'])
+    user.save()
+    _set_role(user, form.cleaned_data['role'])
+
+    changes = {}
+    if before_email != user.email:
+        changes['email'] = {'old': before_email, 'new': user.email}
+    if before_active != user.is_active:
+        changes['is_active'] = {'old': before_active, 'new': user.is_active}
+    if before_role != form.cleaned_data['role']:
+        changes['role'] = {'old': before_role, 'new': form.cleaned_data['role']}
+    if password_changed:
+        changes['password'] = 'changed'
+    if changes:
+        config_audit.record_user_change(request.user, user, 'update', changes)
+    return JsonResponse(serialize_user(user))

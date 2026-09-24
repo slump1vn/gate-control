@@ -522,6 +522,47 @@ export function getConfigChanges(params?: { object_type?: string; object_id?: nu
   return request<Paginated<ConfigChange>>(`/api/v1/gate/config-changes/${query(params)}`);
 }
 
+// ---------------------------------------------------------------- users (admin)
+
+export interface AppUser {
+  id: number;
+  username: string;
+  email: string;
+  role: Role | null;
+  is_active: boolean;
+  is_superuser: boolean;
+  date_joined: string | null;
+  last_login: string | null;
+}
+
+export interface UserInput {
+  username: string;
+  email: string;
+  role: Role;
+  is_active: boolean;
+  password?: string;
+}
+
+export function getUsers(params?: { q?: string; is_active?: 'true' | 'false'; page?: number; page_size?: number }) {
+  return request<Paginated<AppUser>>(`/api/v1/users/${query(params)}`);
+}
+
+export function getUser(id: number) {
+  return request<AppUser>(`/api/v1/users/${id}/`);
+}
+
+export function createUser(data: UserInput) {
+  return request<AppUser>('/api/v1/users/', { method: 'POST', json: data });
+}
+
+export function updateUser(id: number, data: Partial<UserInput>) {
+  return request<AppUser>(`/api/v1/users/${id}/`, { method: 'PATCH', json: data });
+}
+
+export function deactivateUser(id: number) {
+  return request<AppUser>(`/api/v1/users/${id}/`, { method: 'DELETE' });
+}
+
 export async function getDjangoAdminUrl(path: string): Promise<string> {
   const base = await getApiBase();
   return `${base}/admin/${path}`;

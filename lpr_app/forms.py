@@ -4,10 +4,14 @@ validate cameras, gate devices and vehicles the same way.
 """
 
 from django import forms
+from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
 
 from .models import Camera, GateDevice, Vehicle
 from .services import camera_service
 from .utils.secrets import SecretKeyMissing, encrypt_secret
+
+ROLE_CHOICES = [('gate_admin', 'Admin'), ('gate_operator', 'Operator')]
 
 
 def _check_secret_key(value):
@@ -82,3 +86,25 @@ class VehicleForm(forms.ModelForm):
             'plate_display', 'owner_name', 'owner_phone', 'department', 'vehicle_type',
             'valid_from', 'valid_until', 'is_active', 'notes',
         ]
+
+
+class UserForm(forms.ModelForm):
+    role = forms.ChoiceField(choices=ROLE_CHOICES)
+    password = forms.CharField(
+        required=False,
+        strip=False,
+        widget=forms.PasswordInput(render_value=False),
+        help_text='Leave blank to keep the current password.',
+    )
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'is_active']
+
+    def clean_password(self):
+        password = self.cleaned_data.get('password')
+        if password:
+            validate_password(password, self.instance)
+        elif self.instance.pk is None:
+            raise forms.ValidationError('A password is required.')
+        return password

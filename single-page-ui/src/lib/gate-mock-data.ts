@@ -1,5 +1,5 @@
 import type {
-  AccessEvent, Camera, CameraPresets, CameraTestResult, ConfigChange, GateDevice, GateStatus, Vehicle,
+  AccessEvent, AppUser, Camera, CameraPresets, CameraTestResult, ConfigChange, GateDevice, GateStatus, Vehicle,
 } from './gate-api';
 
 export const mockVehicle: Vehicle = {
@@ -269,6 +269,24 @@ export const mockCameraTestFailed: CameraTestResult = {
     { name: 'snapshot', ok: false, message: 'Authentication failed: wrong username or password' },
   ],
 };
+
+export const mockUser: AppUser = {
+  id: 1,
+  username: 'baove1',
+  email: 'baove1@example.com',
+  role: 'gate_operator',
+  is_active: true,
+  is_superuser: false,
+  date_joined: '2026-01-10T02:00:00Z',
+  last_login: '2026-09-22T00:55:00Z',
+};
+
+export const mockUsers: AppUser[] = [
+  { ...mockUser, id: 2, username: 'admin', role: 'gate_admin', last_login: '2026-09-22T01:30:00Z' },
+  mockUser,
+  { ...mockUser, id: 3, username: 'baove2', email: 'baove2@example.com', last_login: null },
+  { ...mockUser, id: 4, username: 'cuu-nhan-vien', is_active: false, last_login: '2026-05-01T03:00:00Z' },
+];
 
 export const mockConfigChanges: ConfigChange[] = [
   {

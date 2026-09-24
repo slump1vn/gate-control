@@ -36,6 +36,16 @@ def user_roles(user):
     return []
 
 
+def primary_role(user):
+    """The single role a user is managed under: gate_admin, gate_operator, or None."""
+    roles = user_roles(user)
+    if GATE_ADMIN in roles:
+        return GATE_ADMIN
+    if GATE_OPERATOR in roles:
+        return GATE_OPERATOR
+    return None
+
+
 def forbidden(message='Permission denied'):
     return JsonResponse(
         {'success': False, 'error': message, 'error_code': 'FORBIDDEN'},

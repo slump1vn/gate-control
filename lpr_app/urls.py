@@ -55,4 +55,8 @@ urlpatterns = [
     path('api/v1/gate/devices/<int:gate_id>/test-decide/', gate_admin_views.api_gate_test_decide, name='api_gate_test_decide'),
     path('api/v1/gate/devices/<int:gate_id>/simulator/', gate_admin_views.api_gate_simulator, name='api_gate_simulator'),
     path('api/v1/gate/config-changes/', gate_admin_views.api_config_changes, name='api_config_changes'),
+
+    # Users (gate_admin)
+    path('api/v1/users/', gate_admin_views.api_users, name='api_users'),
+    path('api/v1/users/<int:user_id>/', gate_admin_views.api_user_detail, name='api_user_detail'),
 ]

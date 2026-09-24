@@ -126,6 +126,18 @@ def save_gate_device(gate, user, token=None):
     return gate
 
 
+def record_user_change(actor, user, action, changes):
+    """Audit a user create/update/deactivate, alongside camera/gate changes."""
+    return GateConfigChange.objects.create(
+        user=actor if getattr(actor, 'is_authenticated', False) else None,
+        object_type='user',
+        object_id=user.pk,
+        object_repr=str(user)[:255],
+        action=action,
+        changes=_json_safe(changes),
+    )
+
+
 def delete_with_audit(obj, user):
     from .camera_service import forget_live_session
 
