@@ -44,6 +44,23 @@ export async function getApiBase(): Promise<string> {
 export let configReady: Promise<void> = initConfig().then(() => {});
 
 let _maxUploadBytes: number | null = null;
+let _publicUpload: boolean | null = null;
+
+/** Whether the manual upload tool is open to visitors who are not signed in. */
+export async function isUploadPublic(): Promise<boolean> {
+  if (_publicUpload !== null) return _publicUpload;
+  try {
+    const base = await getApiBase();
+    const res = await fetch(`${base}/api/v1/config/`);
+    if (res.ok) {
+      const data = await res.json();
+      _publicUpload = data.public_upload === true;
+      return _publicUpload;
+    }
+  } catch {}
+  _publicUpload = false;
+  return false;
+}
 
 export async function getMaxUploadBytes(): Promise<number> {
   if (_maxUploadBytes !== null) return _maxUploadBytes;

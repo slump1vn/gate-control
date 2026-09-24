@@ -1,21 +1,47 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import UploadForm from '@/components/UploadForm';
-import { getImages } from '@/lib/api';
+import { getImages, isUploadPublic } from '@/lib/api';
 import type { ImageSummary } from '@/lib/api';
 import ImageCard from '@/components/ImageCard';
+import { useAuth } from '@/components/AuthContext';
 import { useHealth } from '@/components/HealthContext';
 import AvailabilityGraph from '@/components/AvailabilityGraph';
+import Spinner from '@/components/Spinner';
+import { cardClass, primaryButton } from '@/components/ui';
+
+/** Visitors who are not signed in are shown the door, not the model. */
+function SignedOut() {
+  return (
+    <div className="max-w-md mx-auto px-4 py-20 text-center">
+      <h1 className="text-3xl font-light bg-gradient-to-r from-[#667eea] to-[#764ba2] bg-clip-text text-transparent mb-3">
+        VietinBankSchool LPR
+      </h1>
+      <div className={`${cardClass} p-6`}>
+        <p className="text-gray-600 dark:text-gray-400 mb-5">
+          Automatic barrier control for the school gate. Sign in to watch the lanes, manage registered
+          vehicles and review access events.
+        </p>
+        <Link href="/login" className={`${primaryButton} inline-block`}>Sign in</Link>
+      </div>
+    </div>
+  );
+}
 
 export default function HomePage() {
   const router = useRouter();
+  const { loading, authenticated } = useAuth();
   const { isHealthy } = useHealth();
+  const [publicUpload, setPublicUpload] = useState<boolean | null>(null);
   const [recentImages, setRecentImages] = useState<ImageSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [rateLimitError, setRateLimitError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => { isUploadPublic().then(setPublicUpload).catch(() => setPublicUpload(false)); }, []);
 
   const loadRecent = async () => {
     try {
@@ -26,6 +52,11 @@ export default function HomePage() {
       setLoaded(true);
     }
   };
+
+  if (loading || publicUpload === null) return <Spinner className="py-24" />;
+  // The service decides: with PUBLIC_UPLOAD_ENABLED off, the tool and the images
+  // it produces need a login, and the API refuses anonymous calls either way.
+  if (!authenticated && !publicUpload) return <SignedOut />;
 
   if (!loaded) loadRecent();
 

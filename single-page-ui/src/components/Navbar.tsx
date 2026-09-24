@@ -12,12 +12,14 @@ interface NavItem {
   href: string;
   label: string;
   role?: Role;
+  /** Hidden from visitors who are not signed in. */
+  authOnly?: boolean;
   external?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Home' },
-  { href: '/images', label: 'Images' },
+  { href: '/images', label: 'Images', authOnly: true },
   { href: '/monitor', label: 'Monitor', role: 'gate_operator' },
   { href: '/gate', label: 'Gate', role: 'gate_operator' },
   { href: '/vehicles', label: 'Vehicles', role: 'gate_operator' },
@@ -35,7 +37,9 @@ export default function Navbar() {
   const router = useRouter();
 
   // Admin-only items are hidden from operators; the API enforces roles regardless.
-  const items = NAV_ITEMS.filter((item) => !item.role || hasRole(item.role));
+  const items = NAV_ITEMS.filter((item) => (
+    (!item.role || hasRole(item.role)) && (!item.authOnly || authenticated)
+  ));
 
   const handleLogout = async () => {
     setMenuOpen(false);

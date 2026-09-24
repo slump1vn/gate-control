@@ -23,6 +23,7 @@ def _create_real_image_file(name="test.jpg"):
 
 
 @override_settings(MEDIA_ROOT="/tmp/test_lpr_api_media/")
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class APIImageListURLTest(TestCase):
     def test_url_resolves(self):
         url = reverse("lpr_app:api_image_list")
@@ -38,6 +39,7 @@ class APIImageListURLTest(TestCase):
 
 
 @override_settings(MEDIA_ROOT="/tmp/test_lpr_api_media/")
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class APIImageListResponseTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -101,6 +103,7 @@ class APIImageListResponseTest(TestCase):
 
 
 @override_settings(MEDIA_ROOT="/tmp/test_lpr_api_media/")
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class APIImageListPlateOcrFieldsTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -214,6 +217,7 @@ class APIImageListPlateOcrFieldsTest(TestCase):
 
 
 @override_settings(MEDIA_ROOT="/tmp/test_lpr_api_media/")
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class APIImageListSearchTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -264,6 +268,7 @@ class APIImageListSearchTest(TestCase):
 
 
 @override_settings(MEDIA_ROOT="/tmp/test_lpr_api_media/")
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class APIImageListPaginationTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -317,6 +322,7 @@ class APIImageListPaginationTest(TestCase):
 
 
 @override_settings(MEDIA_ROOT="/tmp/test_lpr_api_media/")
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class APIImageDetailURLTest(TestCase):
     def test_url_resolves(self):
         url = reverse("lpr_app:api_image_detail", kwargs={"image_id": 1})
@@ -328,6 +334,7 @@ class APIImageDetailURLTest(TestCase):
 
 
 @override_settings(MEDIA_ROOT="/tmp/test_lpr_api_media/")
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class APIImageDetailResponseTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -460,6 +467,7 @@ class APIImageDetailResponseTest(TestCase):
 
 
 @override_settings(MEDIA_ROOT="/tmp/test_lpr_api_media/")
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class APIDownloadURLTest(TestCase):
     def test_url_resolves(self):
         url = reverse("lpr_app:api_download_image", kwargs={"image_id": 1, "image_type": "original"})
@@ -471,6 +479,7 @@ class APIDownloadURLTest(TestCase):
 
 
 @override_settings(MEDIA_ROOT="/tmp/test_lpr_api_media/")
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class APIDownloadResponseTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -504,6 +513,7 @@ class APIDownloadResponseTest(TestCase):
     MEDIA_ROOT="/tmp/test_lpr_api_media/",
     CORS_ALLOWED_ORIGINS=["http://testserver"],
 )
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class CORSMiddlewareTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -565,6 +575,7 @@ class CORSMiddlewareTest(TestCase):
 
 
 @override_settings(MEDIA_ROOT="/tmp/test_lpr_api_media/")
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class CORSConfigTest(TestCase):
     def test_cors_allowed_origins_setting_exists(self):
         from django.conf import settings

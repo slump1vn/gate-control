@@ -224,6 +224,7 @@ class CrossOriginSessionTest(TestCase):
 
 
 class PublicEndpointsUnchangedTest(TestCase):
+    @override_settings(PUBLIC_UPLOAD_ENABLED=True)
     def test_public_endpoints_still_anonymous(self):
         for url in ('/api/v1/images/', '/api/v1/config/', '/api/v1/health-light/'):
             self.assertEqual(self.client.get(url).status_code, 200, url)

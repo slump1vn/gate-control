@@ -177,6 +177,11 @@ if 'test' in sys.argv:
 
 MIDDLEWARE.append('lpr_app.middleware.rate_limit.RateLimitMiddleware')
 
+# The upload-and-recognise tool on the home page. Off, it needs a login: an
+# internet-facing gate deployment should not hand its model to strangers.
+# The canary service posts to /api/v1/ocr/ without a login, so it needs this on.
+PUBLIC_UPLOAD_ENABLED = config('PUBLIC_UPLOAD_ENABLED', default=False, cast=bool)
+
 OCR_CROP_PADDING_PX = config('OCR_CROP_PADDING_PX', default=25, cast=int)
 
 # Plate crops narrower than this are enlarged before OCR (0 disables)

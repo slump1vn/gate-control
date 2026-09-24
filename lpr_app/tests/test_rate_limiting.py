@@ -17,6 +17,7 @@ _TEST_CACHE = {
     RATE_LIMIT_INCLUDE_PATHS=["/api/v1/ocr/"],
     CACHES=_TEST_CACHE,
 )
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class RateLimitWithinLimitTest(TestCase):
     def setUp(self):
         cache.clear()
@@ -46,6 +47,7 @@ class RateLimitWithinLimitTest(TestCase):
     RATE_LIMIT_INCLUDE_PATHS=["/api/v1/ocr/"],
     CACHES=_TEST_CACHE,
 )
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class RateLimitExceededTest(TestCase):
     def setUp(self):
         cache.clear()
@@ -87,6 +89,7 @@ class RateLimitExceededTest(TestCase):
     RATE_LIMIT_INCLUDE_PATHS=["/api/v1/ocr/"],
     CACHES=_TEST_CACHE,
 )
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class NonIncludedPathsNotLimitedTest(TestCase):
     def setUp(self):
         cache.clear()
@@ -120,6 +123,7 @@ class NonIncludedPathsNotLimitedTest(TestCase):
     RATE_LIMIT_INCLUDE_PATHS=["/api/v1/ocr/"],
     CACHES=_TEST_CACHE,
 )
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class HealthExcludedTest(TestCase):
     def setUp(self):
         cache.clear()
@@ -143,6 +147,7 @@ class HealthExcludedTest(TestCase):
     RATE_LIMIT_INCLUDE_PATHS=["/api/v1/ocr/"],
     CACHES=_TEST_CACHE,
 )
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class RateLimitDisabledTest(TestCase):
     def setUp(self):
         cache.clear()
@@ -166,6 +171,7 @@ class RateLimitDisabledTest(TestCase):
     RATE_LIMIT_INCLUDE_PATHS=["/api/v1/ocr/"],
     CACHES=_TEST_CACHE,
 )
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class CustomRateTest(TestCase):
     def setUp(self):
         cache.clear()

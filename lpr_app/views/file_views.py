@@ -14,9 +14,12 @@ from ..services.file_service import FileService
 from ..utils.response_helpers import ResponseHelper
 from ..utils.validators import FileValidator
 
+from ..utils.auth import require_login_unless_public
+
 logger = logging.getLogger(__name__)
 
 
+@require_login_unless_public
 def download_image(request, image_id: int, image_type: str):
     """
     Download original or processed image.

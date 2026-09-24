@@ -26,6 +26,7 @@ from ..services.image_processing_service import ImageProcessingService
 from ..services.file_service import FileService
 from ..services.qwen_client import get_qwen_client
 from ..metrics import get_metrics_response
+from ..utils.auth import require_login_unless_public
 from ..utils.metrics_helpers import MetricsHelper, PerformanceTracker
 from ..utils.response_helpers import ResponseHelper
 
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@require_login_unless_public
 def api_ocr_upload(request):
     """
     REST API endpoint to upload an image and get OCR results synchronously.
@@ -236,6 +238,7 @@ def _serialize_image_summary(img):
 
 
 @require_http_methods(["GET"])
+@require_login_unless_public
 def api_image_list(request):
     queryset = UploadedImage.objects.exclude(source='gate')
 
@@ -280,6 +283,7 @@ def api_image_list(request):
 
 
 @require_http_methods(["GET"])
+@require_login_unless_public
 def api_image_detail(request, image_id):
     try:
         img = UploadedImage.objects.exclude(source='gate').get(id=image_id)
@@ -313,6 +317,7 @@ def api_image_detail(request, image_id):
 
 
 @require_http_methods(["GET"])
+@require_login_unless_public
 def api_download_image(request, image_id, image_type):
     try:
         return FileService.download_image(image_id, image_type)
@@ -326,6 +331,8 @@ def api_config(request):
     return JsonResponse({
         'max_upload_bytes': django_settings.UPLOAD_FILE_MAX_SIZE,
         'processing_timeout_minutes': django_settings.PROCESSING_TIMEOUT_MINUTES,
+        # The SPA hides the upload tool from anonymous visitors when this is off
+        'public_upload': django_settings.PUBLIC_UPLOAD_ENABLED,
     })
 
 

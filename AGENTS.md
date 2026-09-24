@@ -50,6 +50,7 @@ There is no linter, formatter, or typecheck configured.
 - Detection uses a two-phase pipeline: Phase 1 detects plate bounding boxes, Phase 2 runs OCR on cropped regions. Prompts are in `qwen_client.py`.
 - Bounding box coordinates arrive in Qwen2VL 0-1000 normalized range and must be converted via `convert_from_qwen2vl_format()`. Because they are normalized, upscaling a crop before sending it does not affect the mapping back to the original image.
 - `UploadedImage` media is organized into `uploads/YYYY/MM/DD/` and `processed/YYYY/MM/DD/` subdirectories.
+- `require_login_unless_public` (in `utils/auth.py`) guards the manual upload tool and the images it produces. It is not about gate roles: any signed-in user passes. The gate's own endpoints keep their `gate_admin`/`gate_operator` checks and are unaffected.
 - Django serves API-only (no templates, no web UI). The frontend is a separate Next.js SPA in `single-page-ui/`. The one exception is Django admin extensions for operators and installers: the gate "Test recognition" page (`lpr_app/templates/admin/lpr_app/gatedevice/test_gate.html`). Do not add user-facing Django templates.
 - `upload_to` path helpers in `models.py` generate date-partitioned upload paths.
 
@@ -91,6 +92,7 @@ Key variables (see `.env.example` and `.env.llamacpp.example` for full list):
 - `LPR_IMAGE_PREFIX` — Image prefix used by all Compose files (default: `ghcr.io/slump1vn/gate-control`)
 - `DATABASE_PATH` — SQLite path (default: project root `db.sqlite3`)
 - `MEDIA_PATH` — Media storage (default: `./media`, Docker: `./container-media`)
+- `PUBLIC_UPLOAD_ENABLED` — Whether the manual upload-and-recognise tool is open to visitors who are not signed in (default: `False`). Off, `/api/v1/ocr/`, the image list, detail and downloads all need a login, and the SPA home page shows a sign-in card instead of the upload form. **The canary service posts to `/api/v1/ocr/` without a login, so the `monitoring` profile needs this on**
 - `UPLOAD_FILE_MAX_SIZE` — Maximum size per uploaded file in bytes (default: `2097152` = 2MB, same in settings.py, env examples and Docker compose). Also sets `FILE_UPLOAD_MAX_MEMORY_SIZE` so accepted uploads stay in memory
 
 ### Admin login

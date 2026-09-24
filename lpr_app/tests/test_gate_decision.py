@@ -348,6 +348,7 @@ class DecideEndpointTest(MediaDirMixin, TestCase):
                     codes.append(self._post(n=2).status_code)
         self.assertEqual(codes, [200, 200, 200, 200])
 
+    @override_settings(PUBLIC_UPLOAD_ENABLED=True)
     def test_gate_frames_hidden_from_public_endpoints(self):
         with fake_pipeline([[det('30A12345')], [det('30A12345')]]):
             self._post(n=2)

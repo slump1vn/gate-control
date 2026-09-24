@@ -58,6 +58,7 @@ services:
       
       # File Upload Settings
       - UPLOAD_FILE_MAX_SIZE=${UPLOAD_FILE_MAX_SIZE:-2097152}
+      - PUBLIC_UPLOAD_ENABLED=${PUBLIC_UPLOAD_ENABLED:-False}
       - MAX_BATCH_SIZE=${MAX_BATCH_SIZE:-10}
       
       # Database Configuration

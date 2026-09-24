@@ -43,6 +43,23 @@ def forbidden(message='Permission denied'):
     )
 
 
+def require_login_unless_public(view):
+    """
+    Open to anyone while PUBLIC_UPLOAD_ENABLED is on; otherwise a login is
+    needed. Guards the manual upload tool and the images it produces, which
+    are separate from the gate's own frames.
+    """
+    @functools.wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if getattr(settings, 'PUBLIC_UPLOAD_ENABLED', False):
+            return view(request, *args, **kwargs)
+        user = getattr(request, 'user', None)
+        if user is not None and user.is_authenticated:
+            return view(request, *args, **kwargs)
+        return forbidden('Sign in to use this')
+    return wrapped
+
+
 def require_role(role):
     def decorator(view):
         @functools.wraps(view)

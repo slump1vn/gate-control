@@ -29,6 +29,7 @@ CANARY_SETTINGS = {
 
 
 @override_settings(**CANARY_SETTINGS)
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class CanaryProcessingFailureCleanupTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -106,6 +107,7 @@ class CanaryProcessingFailureCleanupTest(TestCase):
 
 
 @override_settings(**CANARY_SETTINGS)
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class CanaryExceptionCleanupTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -171,6 +173,7 @@ class CanaryExceptionCleanupTest(TestCase):
 
 
 @override_settings(**CANARY_SETTINGS)
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class CanarySuccessPathUnchangedTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -244,6 +247,7 @@ class CanarySuccessPathUnchangedTest(TestCase):
 
 
 @override_settings(**CANARY_SETTINGS)
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class CanaryExceptionBeforeRecordTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -266,6 +270,7 @@ class CanaryExceptionBeforeRecordTest(TestCase):
 
 
 @override_settings(MEDIA_ROOT="/tmp/test_lpr_canary_media/")
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class CanaryImageNotInSerializerTest(TestCase):
     def test_canary_image_summary_after_cleanup_not_listed(self):
         from ..views.api_views import _serialize_image_summary
@@ -288,6 +293,7 @@ class CanaryImageNotInSerializerTest(TestCase):
 
 
 @override_settings(MEDIA_ROOT="/tmp/test_lpr_canary_media/")
+@override_settings(PUBLIC_UPLOAD_ENABLED=True)
 class APIConfigEndpointTest(TestCase):
     def test_config_endpoint(self):
         response = self.client.get("/api/v1/config/")
