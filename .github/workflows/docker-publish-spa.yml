@@ -25,6 +25,8 @@ env:
 jobs:
   build-and-push-spa:
     runs-on: ubuntu-latest
+    # A normal build takes 4-8 minutes; a hung arm64 (QEMU) build would otherwise run for 6 hours
+    timeout-minutes: 30
     permissions:
       contents: write
       packages: write
