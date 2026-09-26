@@ -12,6 +12,7 @@ import base64
 import logging
 
 from django.contrib.auth.models import Group, User
+from django.db import transaction
 from django.db.models import Q
 from django.forms.models import model_to_dict
 from django.http import HttpResponse, JsonResponse
@@ -61,20 +62,66 @@ def _parse(request):
 # Cameras
 # ---------------------------------------------------------------------------
 
+def _parse_camera_gates(body):
+    """
+    Read the gates a camera is assigned to from a list of {gate, direction}.
+    Returns (links, error response); links is None when the body leaves
+    'gates' out, which keeps the current assignment.
+    """
+    if 'gates' not in body:
+        return None, None
+    items = body['gates'] or []
+    invalid = error('gates must be a list of {gate, direction}', 'VALIDATION_ERROR')
+    if not isinstance(items, list):
+        return None, invalid
+
+    links = []
+    seen = set()
+    for item in items:
+        if not isinstance(item, dict):
+            return None, invalid
+        gate_id = item.get('gate') or item.get('id')
+        direction = item.get('direction', 'in')
+        if direction not in ('in', 'out'):
+            return None, error(f'Unknown direction {direction!r}', 'VALIDATION_ERROR')
+        gate = GateDevice.objects.filter(pk=gate_id).first() if str(gate_id).isdigit() else None
+        if gate is None:
+            return None, error(f'Gate {gate_id} not found', 'NOT_FOUND', status=404)
+        if gate.pk in seen:
+            return None, error(f'Gate "{gate.name}" is listed twice', 'VALIDATION_ERROR')
+        seen.add(gate.pk)
+        links.append((gate, direction))
+    return links, None
+
+
+def _save_camera(request, body, instance):
+    """Validate and save a camera and, when the body lists them, its gates."""
+    links, err = _parse_camera_gates(body)
+    if err:
+        return None, err
+    form = _bound_form(CameraForm, body, instance, extra_fields=('password',))
+    if not form.is_valid():
+        return None, form_errors(form)
+    with transaction.atomic():
+        camera = config_audit.save_camera(form.instance, request.user, password=form.cleaned_data.get('password'))
+        if links is not None:
+            config_audit.set_camera_gates(camera, links, request.user)
+    return camera, None
+
+
 @require_http_methods(["GET", "POST"])
 @require_gate_admin
 def api_cameras(request):
     if request.method == 'GET':
-        cameras = Camera.objects.select_related('updated_by').prefetch_related('gates')
+        cameras = Camera.objects.select_related('updated_by').prefetch_related('gate_links__gate')
         return JsonResponse({'results': [serialize_camera(c) for c in cameras]})
 
     body, err = _parse(request)
     if err:
         return err
-    form = _bound_form(CameraForm, body, Camera(), extra_fields=('password',))
-    if not form.is_valid():
-        return form_errors(form)
-    camera = config_audit.save_camera(form.instance, request.user, password=form.cleaned_data.get('password'))
+    camera, err = _save_camera(request, body, Camera())
+    if err:
+        return err
     return JsonResponse(serialize_camera(camera), status=201)
 
 
@@ -95,10 +142,9 @@ def api_camera_detail(request, camera_id):
     body, err = _parse(request)
     if err:
         return err
-    form = _bound_form(CameraForm, body, camera, extra_fields=('password',))
-    if not form.is_valid():
-        return form_errors(form)
-    camera = config_audit.save_camera(form.instance, request.user, password=form.cleaned_data.get('password'))
+    camera, err = _save_camera(request, body, camera)
+    if err:
+        return err
     return JsonResponse(serialize_camera(camera))
 
 

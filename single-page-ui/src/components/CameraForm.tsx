@@ -5,7 +5,9 @@ import { ApiError, cameraSnapshotPath } from '@/lib/gate-api';
 import { useI18n } from './I18nContext';
 import type { Dictionary } from '@/lib/i18n/dictionaries';
 import type { Translate } from './I18nContext';
-import type { Camera, CameraInput, CameraPresets, CameraTestResult as TestResult, Vendor } from '@/lib/gate-api';
+import type {
+  Camera, CameraGateLink, CameraInput, CameraPresets, CameraTestResult as TestResult, Direction, Vendor,
+} from '@/lib/gate-api';
 import CameraTestResult from './CameraTestResult';
 import RoiPicker from './RoiPicker';
 import { Alert, Badge, Checkbox, Field, cardClass, inputClass, primaryButton, secondaryButton } from './ui';
@@ -28,6 +30,11 @@ interface CameraFormProps {
   initialRoiEditing?: boolean;
   /** A saved camera can be aimed against its live view instead of a still. */
   apiBase?: string;
+  /**
+   * The gates the camera can be assigned to. Without it the form leaves the
+   * camera's assignments alone, since it could not show what it would replace.
+   */
+  gateOptions?: { id: number; name: string }[];
 }
 
 type Values = Omit<CameraInput, 'password'>;
@@ -96,11 +103,15 @@ function clientErrors(v: Values, raw: Record<NumberField, string>, t: Translate)
 
 export default function CameraForm({
   camera, presets, onSave, onTest, onCancel,
-  initialTest = { state: 'idle' }, initialRoiEditing = false, apiBase,
+  initialTest = { state: 'idle' }, initialRoiEditing = false, apiBase, gateOptions,
 }: CameraFormProps) {
   const { t } = useI18n();
   const initial = useMemo(() => toValues(camera, presets), [camera, presets]);
   const [values, setValues] = useState<Values>(initial);
+  // Gate assignments; a row whose gate is still 0 has not been chosen yet
+  const [links, setLinks] = useState<CameraGateLink[]>(
+    () => (camera?.gates ?? []).map((g) => ({ gate: g.id, direction: g.direction })),
+  );
   // Number inputs are kept as typed, so a half-typed value is not coerced.
   const [raw, setRaw] = useState<Record<NumberField, string>>(() => ({
     rtsp_port: String(initial.rtsp_port),
@@ -188,14 +199,26 @@ export default function CameraForm({
     }
   };
 
+  const setLink = (index: number, patch: Partial<CameraGateLink>) => {
+    setLinks((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+    setFormError('');
+  };
+  const addLink = () => setLinks((rows) => [...rows, { gate: 0, direction: 'in' }]);
+  const removeLink = (index: number) => setLinks((rows) => rows.filter((_, i) => i !== index));
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched((t) => ({ ...t, __submit: true }));
     setFormError('');
     if (Object.keys(errors).length) return;
+    const chosen = links.filter((row) => row.gate > 0);
+    if (new Set(chosen.map((row) => row.gate)).size !== chosen.length) {
+      setFormError(t('cameraForm.duplicateGate'));
+      return;
+    }
     setSaving(true);
     try {
-      await onSave({ ...current, ...(password ? { password } : {}) });
+      await onSave({ ...current, ...(password ? { password } : {}), ...(gateOptions ? { gates: chosen } : {}) });
       setPassword('');
     } catch (err) {
       handleApiError(err);
@@ -297,6 +320,51 @@ export default function CameraForm({
             onChange={(v) => set('prefer_snapshot', v)} hint={t('cameraForm.preferSnapshotHint')} />
           <Checkbox id="camera-enabled" label={t('cameraForm.enabled')} checked={values.is_enabled} onChange={(v) => set('is_enabled', v)} />
         </div>
+
+        {gateOptions && (
+          <fieldset className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+            <legend className="px-1 text-sm font-medium text-gray-700 dark:text-gray-300">{t('cameraForm.gates')}</legend>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('cameraForm.gatesHint')}</p>
+            {gateOptions.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('cameraForm.noGates')}</p>
+            ) : (
+              <>
+                {links.length === 0 && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">{t('cameras.unassigned')}</p>
+                )}
+                <div className="space-y-2">
+                  {links.map((row, index) => (
+                    <div key={index} className="flex flex-wrap gap-2 items-center">
+                      <select
+                        aria-label={t('cameraForm.gateN', { n: index + 1 })}
+                        className={`${inputClass} sm:w-56`}
+                        value={row.gate || ''}
+                        onChange={(e) => setLink(index, { gate: Number(e.target.value) })}
+                      >
+                        <option value="">{t('cameraForm.chooseGate')}</option>
+                        {gateOptions.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                      </select>
+                      <select
+                        aria-label={t('gateForm.directionN', { n: index + 1 })}
+                        className={`${inputClass} sm:w-40`}
+                        value={row.direction}
+                        onChange={(e) => setLink(index, { direction: e.target.value as Direction })}
+                      >
+                        <option value="in">{t('gate.entry')}</option>
+                        <option value="out">{t('gate.exit')}</option>
+                      </select>
+                      <button type="button" onClick={() => removeLink(index)}
+                        className="text-sm text-red-600 dark:text-red-400 hover:underline">{t('common.remove')}</button>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" onClick={addLink} className="mt-2 text-sm text-purple-600 dark:text-purple-400 hover:underline">
+                  {t('cameraForm.addGate')}
+                </button>
+              </>
+            )}
+          </fieldset>
+        )}
 
         <div>
           <button type="button" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced}

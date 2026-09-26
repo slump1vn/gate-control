@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { getApiBase } from '@/lib/api';
 import {
-  createCamera, deleteCamera, getCamera, getCameraPresets, getConfigChanges, testCamera, updateCamera,
+  createCamera, deleteCamera, getCamera, getCameraPresets, getConfigChanges, getGateDevices, testCamera, updateCamera,
 } from '@/lib/gate-api';
 import type { Camera, CameraInput, CameraPresets, ConfigChange } from '@/lib/gate-api';
 import { usePolling } from '@/hooks/usePolling';
@@ -30,6 +30,8 @@ function CameraEditContent() {
   const [camera, setCamera] = useState<Camera | null>(null);
   const [status, setStatus] = useState<Pick<Camera, 'agent_status' | 'agent_status_at' | 'agent_trigger' | 'last_test_at' | 'last_test_ok' | 'last_test_error'> | null>(null);
   const [history, setHistory] = useState<ConfigChange[]>([]);
+  // Left unset if the gates cannot be loaded: the form then keeps the camera's assignments
+  const [gateOptions, setGateOptions] = useState<{ id: number; name: string }[] | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -42,6 +44,7 @@ function CameraEditContent() {
   useEffect(() => {
     getApiBase().then(setApiBase);
     getCameraPresets().then(setPresets).catch((err) => setError(err.message));
+    getGateDevices().then((gates) => setGateOptions(gates.map((g) => ({ id: g.id, name: g.name })))).catch(() => {});
     if (id !== null) {
       getCamera(id).then((c) => { setCamera(c); setStatus(c); }).catch((err) => setError(err.message));
       getConfigChanges({ object_type: 'camera', object_id: id, page_size: 20 })
@@ -118,13 +121,14 @@ function CameraEditContent() {
           </div>
           <div>
             <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">{t('cameras.usedBy')}</div>
-            {camera.gates.map((g) => g.name).join(', ') || <span className="text-gray-400">{t('cameras.noGate')}</span>}
+            {camera.gates.map((g) => `${g.name} (${t(g.direction === 'in' ? 'gate.entry' : 'gate.exit')})`).join(', ')
+              || <span className="text-gray-400">{t('cameras.noGate')}</span>}
           </div>
         </div>
       )}
 
       <CameraForm key={camera?.id ?? 'new'} camera={camera} presets={presets} onSave={save} onTest={testCamera}
-        apiBase={apiBase} onCancel={() => router.push('/manage/cameras')} />
+        apiBase={apiBase} gateOptions={gateOptions} onCancel={() => router.push('/manage/cameras')} />
 
       {camera && (
         <section className={`${cardClass} p-5 mt-6`}>

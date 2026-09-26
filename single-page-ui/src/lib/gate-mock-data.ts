@@ -234,7 +234,7 @@ export const mockCamera: Camera = {
   agent_status: 'streaming',
   agent_status_at: '2026-09-22T01:14:50Z',
   agent_trigger: mockTriggerOccupied,
-  gates: [{ id: 1, name: 'Cổng chính' }],
+  gates: [{ id: 1, name: 'Cổng chính', direction: 'in' }],
 };
 
 /** A stand-in camera frame (a car with a plate at the barrier), as an SVG data URL. */

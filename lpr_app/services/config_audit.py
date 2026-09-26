@@ -106,6 +106,41 @@ def save_camera(camera, user, password=None):
     return camera
 
 
+def camera_gate_links(camera):
+    """The camera's gate assignments as readable text, e.g. 'Main gate (in)'."""
+    if camera.pk is None:
+        return ''
+    links = camera.gate_links.select_related('gate').order_by('gate__name', 'direction')
+    return ', '.join(f'{link.gate.name} ({link.direction})' for link in links)
+
+
+def set_camera_gates(camera, links, user):
+    """
+    Replace the gates a camera is assigned to with `links`, a list of
+    (gate, direction), and audit the change on the camera. The gate agent
+    picks the new assignment up from its next config poll.
+    """
+    from ..models import GateCamera
+
+    before = camera_gate_links(camera)
+    camera.gate_links.exclude(gate_id__in=[gate.pk for gate, _ in links]).delete()
+    for gate, direction in links:
+        GateCamera.objects.update_or_create(gate=gate, camera=camera, defaults={'direction': direction})
+    # The caller may hold a prefetched list of the old links
+    camera._prefetched_objects_cache = {}
+    after = camera_gate_links(camera)
+    if before == after:
+        return None
+    return GateConfigChange.objects.create(
+        user=user if getattr(user, 'is_authenticated', False) else None,
+        object_type='camera',
+        object_id=camera.pk,
+        object_repr=str(camera)[:255],
+        action='update',
+        changes={'gates': {'old': before, 'new': after}},
+    )
+
+
 def save_gate_device(gate, user, token=None):
     """
     Save a gate device, setting the controller token only if one was given.

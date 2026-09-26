@@ -170,6 +170,90 @@ class CameraApiTest(ApiTestBase):
         self.assertEqual(self.client.get('/api/v1/gate/config-changes/?page=x').status_code, 400)
 
 
+@override_settings(**SETTINGS)
+class CameraGateAssignmentTest(ApiTestBase):
+    """A camera is assigned to gates from the camera's own page."""
+
+    def setUp(self):
+        super().setUp()
+        self.as_admin()
+        self.west = GateDevice.objects.create(name='West')
+        self.east = GateDevice.objects.create(name='East')
+        self.camera = Camera.objects.create(name='Cam', host='192.168.1.64')
+        self.url = f'/api/v1/gate/cameras/{self.camera.id}/'
+
+    def _gates(self, data):
+        return [(g['id'], g['direction']) for g in data['gates']]
+
+    def test_create_with_gates(self):
+        response = self.send('post', '/api/v1/gate/cameras/', {
+            'name': 'New', 'host': '192.168.1.70',
+            'gates': [{'gate': self.west.id, 'direction': 'out'}],
+        })
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(self._gates(response.json()), [(self.west.id, 'out')])
+        self.assertEqual(GateCamera.objects.get().direction, 'out')
+
+    def test_assign_change_direction_and_remove(self):
+        data = self.send('patch', self.url, {'gates': [
+            {'gate': self.west.id, 'direction': 'in'}, {'gate': self.east.id, 'direction': 'out'},
+        ]}).json()
+        self.assertEqual(sorted(self._gates(data)), sorted([(self.west.id, 'in'), (self.east.id, 'out')]))
+
+        data = self.send('patch', self.url, {'gates': [{'gate': self.west.id, 'direction': 'out'}]}).json()
+        self.assertEqual(self._gates(data), [(self.west.id, 'out')])
+        self.assertFalse(GateCamera.objects.filter(gate=self.east).exists())
+
+        data = self.send('patch', self.url, {'gates': []}).json()
+        self.assertEqual(data['gates'], [])
+        # The gate is seen from its side too
+        self.assertEqual(self.client.get(f'/api/v1/gate/devices/{self.west.id}/').json()['cameras'], [])
+
+    def test_leaving_gates_out_keeps_them(self):
+        GateCamera.objects.create(gate=self.west, camera=self.camera, direction='in')
+        data = self.send('patch', self.url, {'name': 'Renamed'}).json()
+        self.assertEqual(self._gates(data), [(self.west.id, 'in')])
+        self.assertEqual(self._gates(self.client.get('/api/v1/gate/cameras/').json()['results'][0]),
+                         [(self.west.id, 'in')])
+
+    def test_audited_on_the_camera(self):
+        self.send('patch', self.url, {'gates': [{'gate': self.west.id, 'direction': 'in'}]})
+        self.send('patch', self.url, {'gates': [{'gate': self.west.id, 'direction': 'in'}]})
+        changes = GateConfigChange.objects.filter(object_type='camera', object_id=self.camera.id)
+        self.assertEqual(changes.count(), 1, 'an unchanged assignment is not recorded')
+        self.assertEqual(changes.get().changes, {'gates': {'old': '', 'new': 'West (in)'}})
+        self.assertEqual(changes.get().user, self.admin)
+
+    def test_agent_config_follows_the_assignment(self):
+        self.send('patch', self.url, {'gates': [{'gate': self.east.id, 'direction': 'out'}]})
+        config = self.client.get('/api/v1/gate/agent-config/', **AGENT).json()
+        cameras = {g['name']: [(c['id'], c['direction']) for c in g['cameras']] for g in config['gates']}
+        self.assertEqual(cameras, {'West': [], 'East': [(self.camera.id, 'out')]})
+
+    def test_invalid_gates_change_nothing(self):
+        GateCamera.objects.create(gate=self.west, camera=self.camera, direction='in')
+        for gates, status in (
+            ('West', 400),
+            (['West'], 400),
+            ([{'gate': self.east.id, 'direction': 'sideways'}], 400),
+            ([{'gate': 999, 'direction': 'in'}], 404),
+            ([{'gate': self.east.id, 'direction': 'in'}, {'gate': self.east.id, 'direction': 'out'}], 400),
+        ):
+            response = self.send('patch', self.url, {'name': 'Changed', 'gates': gates})
+            self.assertEqual(response.status_code, status, gates)
+        camera = Camera.objects.get()
+        self.assertEqual(camera.name, 'Cam')
+        self.assertEqual([(link.gate_id, link.direction) for link in camera.gate_links.all()], [(self.west.id, 'in')])
+
+    def test_invalid_camera_keeps_gates(self):
+        response = self.send('patch', self.url, {'host': 'http://x', 'gates': []})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(GateCamera.objects.exists())
+        GateCamera.objects.create(gate=self.west, camera=self.camera, direction='in')
+        self.send('patch', self.url, {'host': 'http://x', 'gates': []})
+        self.assertTrue(GateCamera.objects.exists())
+
+
 def _result(ok=True, image=b'\xff\xd8img'):
     result = ConnectionTestResult()
     result.steps = [TestStep('host', True, 'ok'), TestStep('rtsp_port', True, 'ok'),

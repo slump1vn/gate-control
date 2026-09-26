@@ -399,7 +399,14 @@ export interface Camera {
   agent_status: string | null;
   agent_status_at: string | null;
   agent_trigger: TriggerReadout | null;
-  gates: { id: number; name: string }[];
+  /** The gates using this camera, and which way it looks at each. */
+  gates: { id: number; name: string; direction: Direction }[];
+}
+
+/** One gate a camera is assigned to, as sent when saving the camera. */
+export interface CameraGateLink {
+  gate: number;
+  direction: Direction;
 }
 
 export interface CameraInput {
@@ -420,6 +427,8 @@ export interface CameraInput {
   motion_threshold: number;
   settle_ms: number;
   cooldown_s: number;
+  /** Replaces the camera's gate assignments; left out, they are kept. */
+  gates?: CameraGateLink[];
 }
 
 export type CameraPresets = Record<Vendor, {

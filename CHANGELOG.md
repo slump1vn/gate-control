@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A camera can be assigned to gates from its own page (`/manage/cameras/<id>`), choosing entry or exit for each, instead of only from the gate form. The camera API takes `gates: [{gate, direction}]`, camera responses say which way the camera looks at each gate, and every change of assignment is recorded in the camera's change history
 - Vietnamese interface, and a VI/EN switch in the navigation bar. Every operator and admin page is translated; the choice is remembered in the browser and the interface opens in Vietnamese by default
 - `GATE_KEEP_FRAMES` (`evidence` by default, or `denied` / `all`): a decision's other burst frames can be kept instead of discarded, so a vehicle that was denied can be reviewed frame by frame. The kept frames are listed on the event and purged with it
 - `PUBLIC_UPLOAD_ENABLED` (default off): the manual upload-and-recognise tool, the image list and the downloads need a login, and the home page shows a sign-in card to anonymous visitors instead of the upload form. An internet-facing gate deployment should not hand its model to strangers; turn it on to keep the old public demo behaviour, which the canary service needs

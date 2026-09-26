@@ -68,7 +68,11 @@ def serialize_camera(c):
         'agent_status': c.agent_status or None,
         'agent_status_at': iso(c.agent_status_at),
         'agent_trigger': c.agent_trigger or None,
-        'gates': [{'id': g.id, 'name': g.name} for g in c.gates.all()],
+        # Which gates use this camera, and which way it looks at each
+        'gates': [
+            {'id': link.gate.id, 'name': link.gate.name, 'direction': link.direction}
+            for link in c.gate_links.all()
+        ],
     }
 
 

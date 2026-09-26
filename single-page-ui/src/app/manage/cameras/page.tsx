@@ -62,7 +62,8 @@ function CamerasContent() {
                     <div className="text-xs text-gray-500 dark:text-gray-400 capitalize">{c.vendor}</div>
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">{c.host}<span className="text-gray-400"> · rtsp {c.rtsp_port} · http {c.http_port}</span></td>
-                  <td className="px-4 py-3">{c.gates.map((g) => g.name).join(', ') || <span className="text-gray-400">{t('cameras.unassigned')}</span>}</td>
+                  <td className="px-4 py-3">{c.gates.map((g) => `${g.name} (${t(g.direction === 'in' ? 'gate.entry' : 'gate.exit')})`).join(', ')
+                    || <span className="text-gray-400">{t('cameras.unassigned')}</span>}</td>
                   <td className="px-4 py-3"><CameraStatusBadge status={c.agent_status} /></td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     {c.last_test_at ? (
