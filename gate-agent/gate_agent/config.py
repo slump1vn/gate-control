@@ -12,6 +12,13 @@ def _int(name, default):
     return int(os.getenv(name, default))
 
 
+def _bool(name, default):
+    value = os.getenv(name)
+    if value is None or value.strip() == '':
+        return default
+    return value.strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 @dataclass
 class AgentSettings:
     api_url: str = 'http://lpr-app:8000'
@@ -26,8 +33,15 @@ class AgentSettings:
     # vehicle was in position instead of only what comes after.
     prebuffer_frames: int = 3
     # A vehicle that never stops is read anyway after this long in the zone
-    # (0 disables, and only vehicles that come to a stop are read).
-    moving_read_seconds: float = 2.0
+    # (0 disables, and only vehicles that come to a stop are read). Short
+    # enough that a vehicle driving through is read while still in the zone.
+    moving_read_seconds: float = 1.0
+    # A shadow sweeping across the zone darkens it without changing its
+    # texture; with the filter on it is not taken for a vehicle.
+    shadow_filter: bool = True
+    # Texture change (see trigger.texture_difference) at which a brightness
+    # change counts as presence. Shadows measured 0.010-0.024, vehicles 0.028+.
+    shadow_texture_threshold: float = 0.025
     # RTSP transport and socket timeout, read by RtspSource from the environment
     rtsp_transport: str = 'tcp'
     rtsp_timeout_seconds: float = 5.0
@@ -50,6 +64,8 @@ class AgentSettings:
             burst_interval=_float('AGENT_BURST_INTERVAL', cls.burst_interval),
             prebuffer_frames=_int('AGENT_PREBUFFER_FRAMES', cls.prebuffer_frames),
             moving_read_seconds=_float('AGENT_MOVING_READ_SECONDS', cls.moving_read_seconds),
+            shadow_filter=_bool('AGENT_SHADOW_FILTER', cls.shadow_filter),
+            shadow_texture_threshold=_float('AGENT_SHADOW_TEXTURE_THRESHOLD', cls.shadow_texture_threshold),
             rtsp_transport=os.getenv('AGENT_RTSP_TRANSPORT', cls.rtsp_transport),
             rtsp_timeout_seconds=_float('AGENT_RTSP_TIMEOUT_SECONDS', cls.rtsp_timeout_seconds),
             presence_factor=_float('AGENT_PRESENCE_FACTOR', cls.presence_factor),

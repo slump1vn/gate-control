@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- The gate agent ignores shadows (`AGENT_SHADOW_FILTER`, on by default): a change of brightness in the read zone only counts as a vehicle if it also changes the texture of the lane. Tree shadows and the shadows of vehicles that had already left produced most "no plate" events at the west gate. `AGENT_MOVING_READ_SECONDS` now defaults to 1.0 so a vehicle driving through is read while it is still in the zone
 - The live view on `/monitor` and the camera page reads the camera's RTSP sub-stream on the server (`GATE_LIVE_VIEW_SOURCE=rtsp`, the default) instead of asking the camera for an HTTP snapshot per frame. Every viewer shares one stream per camera, closed after `GATE_LIVE_VIEW_IDLE_SECONDS` without a viewer; a stream still opening or failing to open falls back to snapshots. Snapshots can be restored with `GATE_LIVE_VIEW_SOURCE=snapshot`. The app image now includes `opencv-python-headless`
 - A camera can be assigned to gates from its own page (`/manage/cameras/<id>`), choosing entry or exit for each, instead of only from the gate form. The camera API takes `gates: [{gate, direction}]`, camera responses say which way the camera looks at each gate, and every change of assignment is recorded in the camera's change history
 - Vietnamese interface, and a VI/EN switch in the navigation bar. Every operator and admin page is translated; the choice is remembered in the browser and the interface opens in Vietnamese by default

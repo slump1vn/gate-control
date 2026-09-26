@@ -32,7 +32,9 @@ python -m gate_agent replay --gate 1 ./recorded-frames      # recorded frames th
 | `AGENT_STATUS_INTERVAL` | `15` | Seconds between camera status reports |
 | `AGENT_FRAME_INTERVAL` | `0.2` | Seconds between frames for the presence trigger (the loop paces itself, so this is the real rate) |
 | `AGENT_PREBUFFER_FRAMES` | `3` | Frames kept from before the trigger, used as the recognition burst |
-| `AGENT_MOVING_READ_SECONDS` | `2.0` | Read a vehicle that never stops after this long in the zone (`0` waits for a stop) |
+| `AGENT_MOVING_READ_SECONDS` | `1.0` | Read a vehicle that never stops after this long in the zone (`0` waits for a stop) |
+| `AGENT_SHADOW_FILTER` | `true` | A brightness change only counts as presence if it also changes the lane's texture, so a shadow sweeping across the zone is not taken for a vehicle |
+| `AGENT_SHADOW_TEXTURE_THRESHOLD` | `0.025` | Texture change at which it counts. Measured on a real lane: shadows 0.010–0.024, vehicles 0.028 and up |
 | `AGENT_RTSP_TRANSPORT` | `tcp` | RTSP transport. Over UDP a lost packet stalls the stream |
 | `AGENT_RTSP_TIMEOUT_SECONDS` | `5` | Socket timeout for RTSP; without it FFmpeg waits 30s before reporting a stalled stream |
 | `AGENT_BURST_INTERVAL` | `0.4` | Seconds between frames in a recognition burst |
@@ -75,6 +77,20 @@ arriving, rather than frames captured afterwards when it may already have moved 
 
 If plates are still missed, in order: shrink the read zone to where the plate
 actually is, lower `settle_ms` on the camera, then lower `AGENT_FRAME_INTERVAL`.
+
+## Events with no vehicle in them
+
+The trigger measures presence against a learned picture of the empty lane, so
+anything that makes the zone look different can fire it. The usual culprit is
+a shadow: a tree swaying, a building's shadow lengthening in the afternoon, or
+the shadow a vehicle casts after it has left the zone. With
+`AGENT_SHADOW_FILTER` on (the default) a change only counts if it also changes
+the texture of the lane: a shadow multiplies the brightness of the road by a
+roughly constant factor, a vehicle brings edges, windows and a plate. If empty
+events remain, look at their frames: a vehicle crossing the edge of the zone
+means the zone is too wide; an empty lane means raise
+`AGENT_SHADOW_TEXTURE_THRESHOLD` a little (at the risk of missing dark,
+featureless vehicles).
 
 ## A vehicle arrived and no event appeared
 

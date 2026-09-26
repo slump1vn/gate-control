@@ -65,6 +65,8 @@ class GateWorker(threading.Thread):
             max_attempts=settings.max_attempts,
             max_occupied_seconds=settings.max_occupied_seconds,
             moving_read_seconds=settings.moving_read_seconds,
+            shadow_filter=settings.shadow_filter,
+            texture_threshold=settings.shadow_texture_threshold,
         )
         # The frames just before the trigger show the vehicle arriving, which is
         # often a better view of the plate than anything captured afterwards.

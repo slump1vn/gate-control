@@ -1,8 +1,11 @@
+import random
 import unittest
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
-from gate_agent.trigger import IDLE, MOTION, OCCUPIED, PresenceTrigger, difference, prepare
+from gate_agent.trigger import (
+    IDLE, MOTION, OCCUPIED, PresenceTrigger, difference, prepare, texture_difference,
+)
 
 
 def lane(car_x=None, car_color=40, person_x=None):
@@ -128,6 +131,113 @@ class TriggerTest(unittest.TestCase):
         self.assertAlmostEqual(difference(black, white), 1.0)
         self.assertEqual(difference(black, black), 0.0)
         self.assertEqual(difference(black, prepare(Image.new('RGB', (100, 100)))), 1.0)
+
+
+def road(seed=1):
+    """A 320x180 asphalt lane: grey with coarse grain, like a real road surface."""
+    rng = random.Random(seed)
+    image = Image.new('L', (320, 180))
+    image.putdata([max(0, min(255, int(rng.gauss(140, 18)))) for _ in range(320 * 180)])
+    # Grain a few pixels across, so it survives prepare()'s downscale
+    return image.filter(ImageFilter.BoxBlur(2)).convert('RGB')
+
+
+def with_shadow(image, left, right, strength=0.45):
+    """The lane with a soft-edged shadow across columns left..right."""
+    mask = Image.new('L', image.size, 0)
+    ImageDraw.Draw(mask).rectangle([left, 0, right, image.size[1]], fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(6))
+    return Image.composite(image.point(lambda v: int(v * (1 - strength))), image, mask)
+
+
+def with_car(image, x):
+    """The lane with the back of a car at x: body, rear window, lights, bumper and plate."""
+    car = image.copy()
+    draw = ImageDraw.Draw(car)
+    draw.rectangle([x, 50, x + 150, 170], fill=(55, 60, 70))              # body
+    draw.rectangle([x + 20, 58, x + 130, 95], fill=(20, 25, 30))          # rear window
+    draw.rectangle([x + 5, 105, x + 30, 120], fill=(200, 30, 30))         # lights
+    draw.rectangle([x + 120, 105, x + 145, 120], fill=(200, 30, 30))
+    draw.rectangle([x + 55, 125, x + 95, 145], fill=(235, 235, 235))      # plate
+    draw.rectangle([x, 150, x + 150, 165], fill=(15, 15, 15))             # bumper
+    return car
+
+
+class ShadowFilterTest(unittest.TestCase):
+    """A shadow darkens the lane without bringing anything into it."""
+
+    def trigger(self, shadow_filter=True):
+        return PresenceTrigger(motion_threshold=0.02, settle_ms=800, cooldown_s=5, max_attempts=2,
+                               shadow_filter=shadow_filter)
+
+    def setUp(self):
+        self.clock = Clock()
+        self.lane = road()
+
+    def settle(self, trigger, frames):
+        feed(trigger, self.clock, [prepare(self.lane)] * 5)
+        return feed(trigger, self.clock, [prepare(f) for f in frames])
+
+    def sweep(self):
+        # A shadow slides in from the left and stays, as a cloud or a building's does
+        return [with_shadow(self.lane, 0, right) for right in (40, 90, 140, 190)] + \
+            [with_shadow(self.lane, 0, 190)] * 6
+
+    def test_texture_ignores_a_change_of_light(self):
+        lane = prepare(self.lane)
+        width = lane.size[0]
+        darker = prepare(self.lane.point(lambda v: int(v * 0.6)))
+        self.assertLess(texture_difference(darker, lane, width), 0.01)
+        self.assertLess(texture_difference(prepare(with_shadow(self.lane, 0, 190)), lane, width), 0.025)
+        self.assertGreater(texture_difference(prepare(with_car(self.lane, 80)), lane, width), 0.025)
+        # Frames of different sizes cannot be compared
+        self.assertEqual(texture_difference(lane, prepare(Image.new('RGB', (100, 100))), width), 1.0)
+
+    def test_a_shadow_is_taken_for_a_vehicle_without_the_filter(self):
+        self.assertEqual(len(self.settle(self.trigger(shadow_filter=False), self.sweep())), 1)
+
+    def test_a_shadow_does_not_fire_with_the_filter(self):
+        trigger = self.trigger()
+        self.assertEqual(self.settle(trigger, self.sweep()), [])
+        # Once it has stopped moving the lane is idle again, and the shadow is learned
+        self.assertEqual(trigger.state, IDLE)
+
+    def test_a_vehicle_still_fires_with_the_filter(self):
+        frames = [with_car(self.lane, x) for x in (-120, -60, 0, 60)] + [with_car(self.lane, 60)] * 5
+        self.assertEqual(len(self.settle(self.trigger(), frames)), 1)
+
+    def test_a_vehicle_in_the_shade_still_fires(self):
+        shaded = with_shadow(self.lane, 0, 320)
+        frames = [with_car(shaded, x) for x in (-120, -60, 0, 60)] + [with_car(shaded, 60)] * 5
+        self.assertEqual(len(self.settle(self.trigger(), frames)), 1)
+
+    def test_a_shadow_moving_over_a_waiting_vehicle_is_not_a_new_vehicle(self):
+        trigger = self.trigger()
+        car = with_car(self.lane, 60)
+        self.settle(trigger, [with_car(self.lane, x) for x in (-60, 0, 60)] + [car] * 5)
+        trigger.decided(True, self.clock.t)
+        frames = [with_shadow(car, 0, right) for right in (60, 120, 180)] + [with_shadow(car, 0, 180)] * 6
+        self.assertEqual(feed(trigger, self.clock, [prepare(f) for f in frames]), [])
+        self.assertEqual(trigger.attempts, 1)
+
+
+class ShadowFilterSettingsTest(unittest.TestCase):
+    def test_on_by_default_and_switchable(self):
+        from unittest import mock
+
+        from gate_agent.config import AgentSettings
+
+        with mock.patch.dict('os.environ', {}, clear=True):
+            settings = AgentSettings.from_env()
+        self.assertTrue(settings.shadow_filter)
+        self.assertEqual(settings.shadow_texture_threshold, 0.025)
+        self.assertEqual(settings.moving_read_seconds, 1.0)
+        for value, expected in (('false', False), ('0', False), ('off', False), ('true', True), ('', True)):
+            with mock.patch.dict('os.environ', {'AGENT_SHADOW_FILTER': value,
+                                                'AGENT_SHADOW_TEXTURE_THRESHOLD': '0.03'}, clear=True):
+                settings = AgentSettings.from_env()
+            self.assertEqual(settings.shadow_filter, expected, value)
+            self.assertEqual(settings.shadow_texture_threshold, 0.03)
 
 
 if __name__ == '__main__':
