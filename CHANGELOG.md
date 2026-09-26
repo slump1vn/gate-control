@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SPA gate pages: login with role-aware navigation, `/gate` status panel with barrier arm and emergency STOP, `/vehicles` registry with live plate normalisation, `/events` log with frame thumbnails and "open anyway", and for admins `/manage/cameras` (connection test, read-zone picker, change history) and `/manage/gates`
 
 ### Fixed
+- The event log no longer says a frame is missing when only the browser failed to load it. A thumbnail that does not load now reads "frame did not load"; "frame missing" is kept for a file the server found gone from disk. A reverse proxy cutting large responses short had made every event look as if its frame was lost
 - The navigation bar no longer overflows a phone screen: the product name shrinks and truncates rather than pushing the controls off the edge
 - The event log claimed a frame it could not show when the file had gone from the media directory; it now checks the file and distinguishes "no frame" (nothing could be read) from "frame missing" (the file is gone)
 - `USE_X_FORWARDED_PROTO` lets Django trust a TLS-terminating proxy's `X-Forwarded-Proto`, so an HTTPS site is not treated as insecure and absolute URLs are built with the right scheme; `DOCKER_DEPLOYMENT.md` now carries a worked reverse-proxy configuration

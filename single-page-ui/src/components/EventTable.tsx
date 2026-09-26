@@ -25,14 +25,19 @@ function Thumbnail({ event, apiBase, onPreview }: { event: AccessEvent; apiBase:
   const { t } = useI18n();
   const [failed, setFailed] = useState(false);
   if (!event.has_image || failed) {
-    // Two different faults: nothing was kept, or what was kept is gone
-    const lost = event.frame_lost || failed;
+    // Three different faults: nothing was kept, the file is gone from disk
+    // (the server checked), or the file is there but the browser could not load it.
+    const [label, hint]: [keyof Dictionary, keyof Dictionary] = failed
+      ? ['events.frameLoadFailed', 'events.frameLoadFailedHint']
+      : event.frame_lost
+        ? ['events.frameMissing', 'events.frameMissingHint']
+        : ['events.noFrame', 'events.noFrameHint'];
     return (
       <div
-        title={t(lost ? 'events.frameMissingHint' : 'events.noFrameHint')}
+        title={t(hint)}
         className="w-24 h-16 rounded bg-gray-100 dark:bg-[#2d2d2d] flex items-center justify-center text-center text-xs text-gray-400 px-1"
       >
-        {t(lost ? 'events.frameMissing' : 'events.noFrame')}
+        {t(label)}
       </div>
     );
   }
