@@ -1,7 +1,10 @@
 """Live camera frames for the monitoring page."""
 
+import os
+import sys
 import threading
 import time
+import types
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group, User
@@ -213,6 +216,201 @@ class CameraSnapshotEndpointTest(TestCase):
         from ..services import config_audit
         config_audit.delete_with_audit(Camera.objects.get(pk=self.camera.pk), self.operator)
         self.assertNotIn(self.camera.pk, camera_service._fetchers)
+
+
+class FakeCapture:
+    """Enough of cv2.VideoCapture: a stream that sends a frame every few ms."""
+
+    def __init__(self, url, opened):
+        self.url = url
+        self.opened = opened
+        self.options = os.environ.get('OPENCV_FFMPEG_CAPTURE_OPTIONS', '')
+        self.released = False
+        self.count = 0
+
+    def isOpened(self):
+        return self.opened
+
+    def read(self):
+        time.sleep(0.005)
+        self.count += 1
+        return True, f'frame-{self.count}'.encode()
+
+    def release(self):
+        self.released = True
+
+
+class FakeBuffer:
+    def __init__(self, data):
+        self.data = data
+
+    def tobytes(self):
+        return self.data
+
+
+class FakeCv2(types.ModuleType):
+    CAP_FFMPEG = 1900
+    IMWRITE_JPEG_QUALITY = 1
+
+    def __init__(self, opened=True):
+        super().__init__('cv2')
+        self.opened = opened
+        self.captures = []
+
+    def VideoCapture(self, url, api):
+        capture = FakeCapture(url, self.opened)
+        self.captures.append(capture)
+        return capture
+
+    def imencode(self, ext, frame, params):
+        return True, FakeBuffer(RTSP_JPEG + frame)
+
+
+RTSP_JPEG = b'\xff\xd8 rtsp '
+
+
+def wait_until(condition, timeout=3.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if condition():
+            return True
+        time.sleep(0.01)
+    return False
+
+
+@override_settings(GATE_CONFIG_ENCRYPTION_KEY=KEY, GATE_CAMERA_ALLOWED_CIDRS=['10.0.0.0/8'],
+                   GATE_SNAPSHOT_CACHE_SECONDS=0, GATE_LIVE_VIEW_SOURCE='rtsp', GATE_LIVE_VIEW_IDLE_SECONDS=30)
+class RtspLiveViewTest(TestCase):
+    """The live view reads the camera's stream on the server instead of asking for snapshots."""
+
+    def setUp(self):
+        camera_service._fetchers.clear()
+        camera_service._rtsp_readers.clear()
+        self.camera = Camera.objects.create(
+            name='Lane', host='10.0.0.5', vendor='generic', username='admin',
+            snapshot_path='/snap.jpg', main_stream_path='/main', sub_stream_path='/sub',
+        )
+        self.camera.set_password('cam-test-pass')
+        self.camera.save()
+        self.operator = User.objects.create_user('guard', password='pw')
+        self.operator.groups.add(Group.objects.get(name='gate_operator'))
+        self.client.force_login(self.operator)
+        self.cv2 = FakeCv2()
+        modules = patch.dict(sys.modules, {'cv2': self.cv2})
+        modules.start()
+        self.addCleanup(modules.stop)
+        self.addCleanup(self._stop_readers)
+
+    def _stop_readers(self):
+        for reader in list(camera_service._rtsp_readers.values()):
+            reader.stop()
+            if reader.thread:
+                reader.thread.join(2)
+        camera_service._rtsp_readers.clear()
+
+    def url(self):
+        return f'/api/v1/gate/cameras/{self.camera.pk}/snapshot/'
+
+    def reader(self):
+        return camera_service._rtsp_readers[self.camera.pk]
+
+    def test_stream_frames_are_served_once_it_is_open(self):
+        # The first request does not wait for the stream: it gets a snapshot meanwhile
+        with fake_camera([FakeResponse()]):
+            response = self.client.get(self.url())
+        self.assertEqual(response.content, JPEG)
+        self.assertTrue(wait_until(lambda: self.reader().frame is not None))
+
+        with fake_camera([]) as get:
+            response = self.client.get(self.url())
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.content.startswith(RTSP_JPEG + b'frame-'))
+        get.assert_not_called()
+
+        capture = self.cv2.captures[0]
+        self.assertEqual(capture.url, 'rtsp://admin:cam-test-pass@10.0.0.5:554/sub')
+        self.assertIn('rtsp_transport;tcp', capture.options)
+
+    def test_viewers_share_one_stream(self):
+        with fake_camera([FakeResponse()] * 3):
+            self.client.get(self.url())
+            self.assertTrue(wait_until(lambda: self.reader().frame is not None))
+            for _ in range(5):
+                self.assertEqual(self.client.get(self.url()).status_code, 200)
+        self.assertEqual(len(self.cv2.captures), 1)
+
+    def test_main_stream_when_there_is_no_sub_stream(self):
+        Camera.objects.filter(pk=self.camera.pk).update(sub_stream_path='')
+        with fake_camera([FakeResponse()]):
+            self.client.get(self.url())
+        self.assertTrue(wait_until(lambda: len(self.cv2.captures) == 1))
+        self.assertTrue(self.cv2.captures[0].url.endswith(':554/main'))
+
+    def test_a_stream_that_will_not_open_falls_back_to_snapshots(self):
+        self.cv2.opened = False
+        with fake_camera([FakeResponse()] * 10) as get:
+            self.client.get(self.url())
+            self.assertTrue(wait_until(lambda: self.reader().failed_at > 0))
+            time.sleep(0.06)  # past the snapshot cache interval
+            for _ in range(3):
+                response = self.client.get(self.url())
+                self.assertEqual(response.content, JPEG)
+                time.sleep(0.06)
+        # Not retried on every refresh
+        self.assertEqual(len(self.cv2.captures), 1)
+        self.assertEqual(get.call_count, 4)
+
+        with patch.object(camera_service, 'RTSP_RETRY_SECONDS', 0), fake_camera([FakeResponse()]):
+            self.client.get(self.url())
+        self.assertTrue(wait_until(lambda: len(self.cv2.captures) == 2))
+
+    def test_the_stream_closes_when_nobody_watches(self):
+        with override_settings(GATE_LIVE_VIEW_IDLE_SECONDS=0.1), fake_camera([FakeResponse()]):
+            self.client.get(self.url())
+            self.assertTrue(wait_until(lambda: self.cv2.captures and self.cv2.captures[0].released))
+        self.assertFalse(self.reader().thread.is_alive())
+
+    def test_snapshot_source_never_opens_a_stream(self):
+        with override_settings(GATE_LIVE_VIEW_SOURCE='snapshot'), fake_camera([FakeResponse()]):
+            response = self.client.get(self.url())
+        self.assertEqual(response.content, JPEG)
+        self.assertEqual(self.cv2.captures, [])
+
+    def test_camera_with_only_a_stream(self):
+        Camera.objects.filter(pk=self.camera.pk).update(snapshot_path='', live_snapshot_path='')
+        response = self.client.get(self.url())
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('Opening the camera stream', response.json()['error'])
+        self.assertTrue(wait_until(lambda: self.reader().frame is not None))
+        self.assertEqual(self.client.get(self.url()).status_code, 200)
+
+    def test_host_outside_the_allowlist_is_never_streamed(self):
+        Camera.objects.filter(pk=self.camera.pk).update(host='8.8.8.8')
+        with fake_camera([FakeResponse()]) as get:
+            response = self.client.get(self.url())
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('outside the allowed camera networks', response.json()['error'])
+        self.assertEqual(self.cv2.captures, [])
+        get.assert_not_called()
+
+    def test_changing_or_deleting_the_camera_closes_its_stream(self):
+        with fake_camera([FakeResponse()] * 2):
+            self.client.get(self.url())
+            first = self.reader()
+            self.assertTrue(wait_until(lambda: first.frame is not None))
+            camera = Camera.objects.get(pk=self.camera.pk)
+            camera.sub_stream_path = '/other'
+            camera.config_version += 1
+            camera.save()
+            self.client.get(self.url())
+        self.assertIsNot(self.reader(), first)
+        self.assertTrue(wait_until(lambda: not first.thread.is_alive()))
+
+        second = self.reader()
+        self.assertTrue(wait_until(lambda: second.frame is not None))
+        camera_service.forget_live_session(self.camera.pk)
+        self.assertTrue(wait_until(lambda: not second.thread.is_alive()))
+        self.assertNotIn(self.camera.pk, camera_service._rtsp_readers)
 
 
 @override_settings(GATE_CONFIG_ENCRYPTION_KEY=KEY, GATE_CAMERA_ALLOWED_CIDRS=['10.0.0.0/8'])

@@ -11,3 +11,5 @@ django-apscheduler>=0.7.0
 django-cors-headers>=4.0
 requests>=2.31,<3
 cryptography>=42
+# Live view over RTSP (bundles FFmpeg)
+opencv-python-headless>=4.8

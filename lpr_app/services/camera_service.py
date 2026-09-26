@@ -9,6 +9,7 @@ and the request is made to that resolved address to rule out DNS rebinding.
 
 import ipaddress
 import logging
+import os
 import re
 import socket
 import threading
@@ -328,11 +329,161 @@ def _fetcher_for(camera):
 
 
 def forget_live_session(camera_pk):
-    """Drop a camera's kept-open session, e.g. after it is deleted."""
+    """Drop a camera's kept-open session and stream, e.g. after it is deleted."""
     with _fetchers_lock:
         fetcher = _fetchers.pop(camera_pk, None)
+        reader = _rtsp_readers.pop(camera_pk, None)
     if fetcher is not None:
         fetcher.session.close()
+    if reader is not None:
+        reader.stop()
+
+
+# ---------------------------------------------------------------------------
+# Live view over RTSP
+#
+# A snapshot is a separate HTTP request the camera has to encode and answer,
+# and a camera already serving the gate agent may start refusing them. A
+# browser cannot play RTSP, so with GATE_LIVE_VIEW_SOURCE=rtsp the server holds
+# one stream per camera open (the sub-stream, cheap to decode) and hands out
+# its newest frame as a JPEG. Every viewer shares that one stream, which is
+# closed again once nobody has asked for a frame for GATE_LIVE_VIEW_IDLE_SECONDS.
+#
+# A request never waits for the stream: until its first frame arrives, or
+# while it cannot be opened, the view carries on with HTTP snapshots.
+# ---------------------------------------------------------------------------
+
+RTSP_RETRY_SECONDS = 15
+RTSP_JPEG_QUALITY = 80
+
+_rtsp_readers = {}
+
+
+def live_stream_url(camera, password, host=None):
+    """The stream the live view reads: the sub-stream, or the main one if there is none."""
+    stream = 'sub' if camera.sub_stream_path else 'main'
+    return rtsp_url(camera, password, stream=stream, host=host)
+
+
+def _rtsp_signature(camera):
+    return (
+        camera.host, camera.rtsp_port, camera.username,
+        camera.sub_stream_path or camera.main_stream_path, camera.config_version,
+    )
+
+
+class _RtspLiveReader:
+    """One open RTSP stream per camera, read in the background, shared by every viewer."""
+
+    def __init__(self, camera):
+        self.camera_pk = camera.pk
+        self.signature = _rtsp_signature(camera)
+        self.lock = threading.Lock()
+        self.stop_event = threading.Event()
+        self.thread = None
+        self.frame = None
+        self.seq = 0
+        self.jpeg = None
+        self.jpeg_seq = 0
+        self.error = ''
+        self.failed_at = 0.0
+        self.last_request = 0.0
+
+    def get(self, camera):
+        """The newest frame as JPEG, or (None, why not). Never blocks on the camera."""
+        with self.lock:
+            self.last_request = time.monotonic()
+            running = self.thread is not None and self.thread.is_alive()
+            if not running:
+                if self.failed_at and time.monotonic() - self.failed_at < RTSP_RETRY_SECONDS:
+                    return None, self.error
+                error = self._start(camera)
+                if error:
+                    return None, error
+                return None, 'Opening the camera stream'
+            if self.frame is None:
+                return None, 'Opening the camera stream'
+            if self.jpeg_seq != self.seq:
+                self.jpeg = _encode_jpeg(self.frame)
+                self.jpeg_seq = self.seq
+            return self.jpeg, ''
+
+    def _start(self, camera):
+        # Resolved and decrypted here: the reader thread never touches the database
+        try:
+            ip = resolve_allowed_host(camera.host)
+            password = camera.get_password()
+        except CameraHostError as exc:
+            return self._fail(str(exc))
+        except Exception as exc:
+            return self._fail(f'Stored password cannot be read: {exc}')
+        self.frame, self.error = None, ''
+        self.stop_event.clear()
+        self.thread = threading.Thread(
+            target=self._run, args=(live_stream_url(camera, password, host=ip),),
+            name=f'live-rtsp-{camera.pk}', daemon=True,
+        )
+        self.thread.start()
+        return ''
+
+    def _fail(self, error):
+        self.error = error
+        self.failed_at = time.monotonic()
+        return error
+
+    def _run(self, url):
+        capture = None
+        try:
+            import cv2
+            # Over UDP a lost packet stalls the stream; FFmpeg reads these at open time only
+            micros = TEST_TIMEOUT_SECONDS * 1_000_000
+            os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = (
+                f'rtsp_transport;tcp|stimeout;{micros}|timeout;{micros}|max_delay;500000'
+            )
+            capture = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+            if not capture.isOpened():
+                raise RuntimeError('Cannot open the RTSP stream')
+            logger.info('Live view of camera %s reading %s', self.camera_pk, redact_url(url))
+            idle = settings.GATE_LIVE_VIEW_IDLE_SECONDS
+            while not self.stop_event.is_set():
+                if time.monotonic() - self.last_request > idle:
+                    logger.info('Live view of camera %s idle; closing its stream', self.camera_pk)
+                    break
+                ok, frame = capture.read()
+                if not ok:
+                    raise RuntimeError('The RTSP stream stopped sending frames')
+                with self.lock:
+                    self.frame = frame
+                    self.seq += 1
+        except Exception as exc:
+            logger.warning('Live view of camera %s: %s', self.camera_pk, exc)
+            with self.lock:
+                self._fail(f'RTSP: {exc}')
+                self.frame = None
+        finally:
+            if capture is not None:
+                capture.release()
+
+    def stop(self):
+        self.stop_event.set()
+
+
+def _encode_jpeg(frame):
+    import cv2
+    ok, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, RTSP_JPEG_QUALITY])
+    return buffer.tobytes() if ok else None
+
+
+def _rtsp_reader_for(camera):
+    signature = _rtsp_signature(camera)
+    with _fetchers_lock:
+        reader = _rtsp_readers.get(camera.pk)
+        if reader is None or reader.signature != signature:
+            if reader is not None:
+                reader.stop()
+            reader = _RtspLiveReader(camera)
+            _rtsp_readers[camera.pk] = reader
+        return reader
 
 
 def live_snapshot(camera):
@@ -340,15 +491,26 @@ def live_snapshot(camera):
     One frame from a saved camera for the live view. Returns (jpeg_bytes,
     error); never raises for network failures.
 
-    The camera is asked at most once per GATE_SNAPSHOT_CACHE_SECONDS, however
-    many viewers there are and however fast they refresh: it also serves the
-    gate agent, and some cameras answer HTTP 500 when pushed harder. Failures
-    are held for the same interval, so a struggling camera gets a break.
+    With GATE_LIVE_VIEW_SOURCE=rtsp (the default) the frame comes from the
+    camera's stream when one is configured and open. Otherwise, and meanwhile,
+    it is a snapshot: the camera is asked at most once per
+    GATE_SNAPSHOT_CACHE_SECONDS, however many viewers there are and however
+    fast they refresh, since it also serves the gate agent and some cameras
+    answer HTTP 500 when pushed harder. Failures are held for the same
+    interval, so a struggling camera gets a break.
     """
+    stream_error = ''
+    if settings.GATE_LIVE_VIEW_SOURCE == 'rtsp' and (camera.sub_stream_path or camera.main_stream_path):
+        image, stream_error = _rtsp_reader_for(camera).get(camera)
+        if image is not None:
+            return image, ''
     if not (camera.live_snapshot_path or camera.snapshot_path):
-        return None, 'No snapshot path configured for this camera.'
+        return None, stream_error or 'No snapshot path configured for this camera.'
     min_interval = max(0.05, settings.GATE_SNAPSHOT_CACHE_SECONDS)
-    return _fetcher_for(camera).get(camera, min_interval)
+    image, error = _fetcher_for(camera).get(camera, min_interval)
+    if image is None and stream_error:
+        error = f'{stream_error}; snapshot: {error}'
+    return image, error
 
 
 def _check_tcp(ip, port):

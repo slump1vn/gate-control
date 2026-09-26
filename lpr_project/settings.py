@@ -222,6 +222,12 @@ GATE_CONFIG_ENCRYPTION_KEY = config('GATE_CONFIG_ENCRYPTION_KEY', default='')
 # refresh and however many of them there are. Cameras also serve the gate agent,
 # and some answer HTTP 500 when snapshots are requested too quickly.
 GATE_SNAPSHOT_CACHE_SECONDS = config('GATE_SNAPSHOT_CACHE_SECONDS', default=1.0, cast=float)
+# Where the live view gets its frames: 'rtsp' reads the camera's (sub-)stream on
+# the server, one stream per camera shared by every viewer, and falls back to
+# snapshots while it cannot; 'snapshot' asks the camera for an HTTP snapshot.
+GATE_LIVE_VIEW_SOURCE = 'snapshot' if config('GATE_LIVE_VIEW_SOURCE', default='rtsp').strip().lower() == 'snapshot' else 'rtsp'
+# The live view closes a camera's stream after this long without a viewer
+GATE_LIVE_VIEW_IDLE_SECONDS = config('GATE_LIVE_VIEW_IDLE_SECONDS', default=30.0, cast=float)
 
 GATE_CAMERA_ALLOWED_CIDRS = config(
     'GATE_CAMERA_ALLOWED_CIDRS',
