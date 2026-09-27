@@ -8,6 +8,7 @@ const STATE_LABELS: Record<string, keyof Dictionary> = {
   idle: 'trigger.idle',
   motion: 'trigger.motion',
   occupied: 'trigger.occupied',
+  passing: 'trigger.passing',
 };
 
 function Score({ label, value, threshold }: { label: string; value: number; threshold: number }) {

@@ -6,7 +6,8 @@ import { useI18n } from './I18nContext';
 import type { Dictionary } from '@/lib/i18n/dictionaries';
 import type { Translate } from './I18nContext';
 import type {
-  Camera, CameraGateLink, CameraInput, CameraPresets, CameraTestResult as TestResult, Direction, Vendor,
+  Camera, CameraGateLink, CameraInput, CameraPresets, CameraTestResult as TestResult, Direction, TravelDirection,
+  Vendor,
 } from '@/lib/gate-api';
 import CameraTestResult from './CameraTestResult';
 import RoiPicker from './RoiPicker';
@@ -57,6 +58,7 @@ const DEFAULTS: Values = {
   motion_threshold: 0.02,
   settle_ms: 800,
   cooldown_s: 5,
+  travel_direction: 'any',
 };
 
 const PATH_FIELDS = ['main_stream_path', 'sub_stream_path', 'snapshot_path', 'live_snapshot_path'] as const;
@@ -320,6 +322,16 @@ export default function CameraForm({
             onChange={(v) => set('prefer_snapshot', v)} hint={t('cameraForm.preferSnapshotHint')} />
           <Checkbox id="camera-enabled" label={t('cameraForm.enabled')} checked={values.is_enabled} onChange={(v) => set('is_enabled', v)} />
         </div>
+
+        <Field label={t('cameraForm.travel')} htmlFor="camera-travel_direction" error={errorFor('travel_direction')}
+          hint={t('cameraForm.travelHint')}>
+          <select id="camera-travel_direction" className={inputClass} value={values.travel_direction}
+            onChange={(e) => set('travel_direction', e.target.value as TravelDirection)}>
+            <option value="any">{t('cameraForm.travelAny')}</option>
+            <option value="toward">{t('cameraForm.travelToward')}</option>
+            <option value="away">{t('cameraForm.travelAway')}</option>
+          </select>
+        </Field>
 
         {gateOptions && (
           <fieldset className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">

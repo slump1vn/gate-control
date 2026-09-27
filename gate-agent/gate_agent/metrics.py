@@ -4,6 +4,8 @@ from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
 FRAMES = Counter('lpr_gate_agent_frames_total', 'Camera frames grabbed', ['gate', 'result'])
 TRIGGERS = Counter('lpr_gate_agent_triggers_total', 'Recognition bursts triggered', ['gate'])
+# Vehicles left unread because they were heading the other way (camera travel_direction)
+PASSED = Counter('lpr_gate_agent_passed_total', 'Vehicles not read: heading the other way', ['gate'])
 # Measured, not configured: a slow camera or a slow network lowers it
 FPS = Gauge('lpr_gate_agent_fps', 'Frames per second actually grabbed', ['gate'])
 # What the trigger is seeing right now, against its thresholds. When a vehicle

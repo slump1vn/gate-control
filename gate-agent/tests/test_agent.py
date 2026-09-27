@@ -589,6 +589,18 @@ class StatusReadoutTest(unittest.TestCase):
         self.assertLessEqual(readout['motion'], 1.0)
         self.assertEqual(readout['presence_threshold'], worker.trigger.presence_threshold)
 
+    def test_the_camera_says_which_vehicles_to_read(self):
+        gate = gate_config()
+        for configured, expected in (('toward', 'toward'), ('away', 'away'), (None, 'any')):
+            camera = dict(gate['cameras'][0])
+            if configured:
+                camera['travel_direction'] = configured
+            worker = GateWorker(gate, camera, config(), settings(), mock.Mock(), None,
+                                source_factory=lambda camera: FakeSource([frame()]),
+                                clock=Clock(), sleep=lambda s: None)
+            self.assertEqual(worker.trigger.travel_direction, expected)
+            self.assertTrue(worker.trigger.shadow_filter)
+
 
 class WorkerSurvivalTest(unittest.TestCase):
     """A lane must keep being watched even when something unexpected goes wrong."""

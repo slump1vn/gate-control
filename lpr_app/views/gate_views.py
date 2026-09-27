@@ -125,7 +125,7 @@ def api_gate_agent_commands(request):
 # Numbers only, and only the ones the UI shows: the agent is trusted to
 # report, not to decide what gets stored.
 TRIGGER_NUMBERS = ('fps', 'motion', 'presence', 'motion_threshold', 'presence_threshold', 'grab_seconds')
-TRIGGER_STATES = {'idle', 'motion', 'occupied'}
+TRIGGER_STATES = {'idle', 'motion', 'occupied', 'passing'}
 
 
 def _trigger_readout(item):
@@ -170,6 +170,8 @@ def _agent_camera(camera, direction=''):
         'motion_threshold': camera.motion_threshold,
         'settle_ms': camera.settle_ms,
         'cooldown_s': camera.cooldown_s,
+        # Which vehicles to read: 'any', 'toward' or 'away' from the camera
+        'travel_direction': camera.travel_direction,
         'config_version': camera.config_version,
     }
 

@@ -18,6 +18,11 @@ must replace the first, before the next trigger.
 With shadow_filter on, a change of brightness only counts as presence if it
 also changes the texture of the lane (see texture_difference): a shadow
 sweeping across the zone darkens it without bringing anything into it.
+
+With travel_direction set, only vehicles heading that way are read. Where two
+cameras watch one lane from either end, each sees every vehicle; a vehicle
+coming toward a camera moves down its picture, one going away moves up. A
+vehicle heading the other way is left alone until the lane clears (PASSING).
 """
 
 import math
@@ -29,6 +34,11 @@ THUMB_WIDTH = 64
 IDLE = 'idle'
 MOTION = 'motion'
 OCCUPIED = 'occupied'
+# A vehicle heading the other way: not read, waited out until the lane clears
+PASSING = 'passing'
+
+TOWARD = 'toward'
+AWAY = 'away'
 
 
 def prepare(image):
@@ -99,10 +109,38 @@ def texture_difference(a, b, width):
     return sum(abs(r - m) for r, m in zip(ratio, local)) / max(len(ratio), 1)
 
 
+# A pixel belongs to what changed when it differs from the background by more than this (0-255)
+CHANGED_PIXEL = 30.0
+# How far (as a fraction of the zone's height) what changed must move before its heading counts
+MIN_TRAVEL = 0.08
+
+
+def changed_row(frame, background, width):
+    """
+    Vertical centre of what differs from the background, 0 at the top of the
+    zone and 1 at the bottom, or None when nothing does.
+    """
+    if not width or len(frame) != len(background):
+        return None
+    height = len(frame) // width
+    if height < 2:
+        return None
+    total = weighted = 0.0
+    for i, (f, b) in enumerate(zip(frame, background)):
+        d = abs(f - b)
+        if d > CHANGED_PIXEL:
+            total += d
+            weighted += d * (i // width)
+    if not total:
+        return None
+    return weighted / total / (height - 1)
+
+
 class PresenceTrigger:
     def __init__(self, motion_threshold=0.02, settle_ms=800, cooldown_s=5, presence_factor=3.0,
                  max_attempts=2, max_occupied_seconds=300.0, background_alpha=0.05,
-                 moving_read_seconds=0.0, shadow_filter=False, texture_threshold=0.025):
+                 moving_read_seconds=0.0, shadow_filter=False, texture_threshold=0.025,
+                 travel_direction='any'):
         self.motion_threshold = motion_threshold
         self.presence_threshold = max(motion_threshold * presence_factor, 0.04)
         self.settle = settle_ms / 1000.0
@@ -117,6 +155,12 @@ class PresenceTrigger:
         self.shadow_filter = shadow_filter
         self.texture_threshold = texture_threshold
         self.width = 0
+        # 'toward' / 'away' reads only vehicles heading that way; anything else reads all
+        self.travel_direction = travel_direction if travel_direction in (TOWARD, AWAY) else 'any'
+        self.track = []
+        self.heading = None
+        self.passing_since = None
+        self.passed = 0
 
         self.state = IDLE
         self.background = None
@@ -163,25 +207,46 @@ class PresenceTrigger:
             if moving or present:
                 self.state = MOTION
                 self.last_motion_at = now
+                self.track = []
+                self._follow(frame, present)
             else:
                 a = self.alpha
                 self.background = [b + a * (f - b) for b, f in zip(self.background, frame)]
             return False
 
         if self.state == MOTION:
+            self._follow(frame, present)
             if moving:
                 self.last_motion_at = now
                 if (self.moving_read and present and self.present_since is not None
                         and now - self.present_since >= self.moving_read):
                     # Still moving after all this time: read it now rather than
                     # wait for a stop that may never come.
-                    return self._fire(now, new_vehicle=True, moving=True)
+                    return self._arrive(now, moving=True)
                 return False
             if now - self.last_motion_at < self.settle:
                 return False
             if present:
-                return self._fire(now, new_vehicle=True)
+                return self._arrive(now)
             self.state = IDLE
+            return False
+
+        if self.state == PASSING:
+            # Heading the other way: never read, and the lane must clear first
+            if moving:
+                self.last_motion_at = now
+                self.clear_since = None
+            elif not present:
+                if self.clear_since is None:
+                    self.clear_since = now
+                elif now - self.clear_since >= self.settle:
+                    self.state = IDLE
+            else:
+                self.clear_since = None
+                if now - self.passing_since > self.max_occupied:
+                    # It stopped for good: accept it as the new empty lane
+                    self.background = frame
+                    self.state = IDLE
             return False
 
         # OCCUPIED
@@ -226,6 +291,35 @@ class PresenceTrigger:
             return change
         texture = texture_difference(frame, reference, self.width)
         return min(change, texture * self.presence_threshold / self.texture_threshold)
+
+    def _follow(self, frame, present):
+        """Record where what changed sits in the zone, to tell which way it is heading."""
+        if not present:
+            return
+        row = changed_row(frame, self.background, self.width)
+        if row is not None:
+            self.track.append(row)
+
+    def travel(self):
+        """TOWARD (moving down the picture), AWAY (moving up), or None when it has not moved enough."""
+        if len(self.track) < 2:
+            return None
+        shift = self.track[-1] - self.track[0]
+        if abs(shift) < MIN_TRAVEL:
+            return None
+        return TOWARD if shift > 0 else AWAY
+
+    def _arrive(self, now, moving=False):
+        """A new vehicle is in the zone: read it, unless it is heading the other way."""
+        self.heading = self.travel()
+        if self.travel_direction != 'any' and self.heading not in (None, self.travel_direction):
+            # A vehicle whose heading cannot be told (it appeared and stopped) is read
+            self.state = PASSING
+            self.passing_since = now
+            self.clear_since = None
+            self.passed += 1
+            return False
+        return self._fire(now, new_vehicle=True, moving=moving)
 
     def _fire(self, now, new_vehicle, moving=False):
         if new_vehicle:

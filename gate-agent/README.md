@@ -78,6 +78,18 @@ arriving, rather than frames captured afterwards when it may already have moved 
 If plates are still missed, in order: shrink the read zone to where the plate
 actually is, lower `settle_ms` on the camera, then lower `AGENT_FRAME_INTERVAL`.
 
+## Two events for one vehicle
+
+Where a gate has a camera at each end of the lane, both see every vehicle: the
+entry camera sees a vehicle leaving, the exit camera sees one arriving. Each
+then makes a decision, and one of the two is filed under the wrong direction.
+Set **Vehicles to read** on each camera to *coming toward the camera*: a vehicle
+is then read only by the camera it drives toward (front plate, before the
+barrier), and the other shows it as *going the other way* and leaves it alone
+until the lane clears (`lpr_gate_agent_passed_total`). The agent tells the
+heading from whether what changed in the zone moves down the picture (toward
+the camera) or up it (away), so this assumes a camera looking down the lane.
+
 ## Events with no vehicle in them
 
 The trigger measures presence against a learned picture of the empty lane, so

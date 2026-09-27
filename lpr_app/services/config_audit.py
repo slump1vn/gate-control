@@ -17,6 +17,7 @@ AUDITED_FIELDS = {
         'name', 'is_enabled', 'host', 'rtsp_port', 'http_port', 'username', 'vendor',
         'main_stream_path', 'sub_stream_path', 'snapshot_path', 'live_snapshot_path', 'prefer_snapshot',
         'roi_x', 'roi_y', 'roi_w', 'roi_h', 'motion_threshold', 'settle_ms', 'cooldown_s',
+        'travel_direction',
     ],
     GateDevice: [
         'name', 'location', 'controller_type', 'controller_url', 'exit_policy',

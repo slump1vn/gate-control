@@ -67,6 +67,7 @@ class GateWorker(threading.Thread):
             moving_read_seconds=settings.moving_read_seconds,
             shadow_filter=settings.shadow_filter,
             texture_threshold=settings.shadow_texture_threshold,
+            travel_direction=self.camera.get('travel_direction', 'any'),
         )
         # The frames just before the trigger show the vehicle arriving, which is
         # often a better view of the plate than anything captured afterwards.
@@ -126,7 +127,12 @@ class GateWorker(threading.Thread):
                     self.fps = fps
                     metrics.FPS.labels(gate=self.label).set(fps)
 
+                passed = self.trigger.passed
                 fired = self.trigger.update(prepare(frame), self.clock())
+                if self.trigger.passed != passed:
+                    metrics.PASSED.labels(gate=self.label).inc()
+                    logger.info('Gate %s: vehicle heading %s, not %s; not read',
+                                self.label, self.trigger.heading, self.trigger.travel_direction)
                 motion, presence = self.trigger.last_scores
                 metrics.MOTION.labels(gate=self.label).set(motion)
                 metrics.PRESENCE.labels(gate=self.label).set(presence)

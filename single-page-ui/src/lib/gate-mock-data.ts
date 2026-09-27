@@ -225,6 +225,7 @@ export const mockCamera: Camera = {
   motion_threshold: 0.02,
   settle_ms: 800,
   cooldown_s: 5,
+  travel_direction: 'toward',
   config_version: 4,
   updated_by: 'admin',
   updated_at: '2026-09-21T09:00:00Z',

@@ -471,6 +471,11 @@ class AgentTriggerReadoutTest(TestCase):
         self.assertEqual(data['agent_trigger']['fps'], 5.02)
         self.assertIn('at', data['agent_trigger'])
 
+    def test_a_vehicle_heading_the_other_way_is_reported(self):
+        self.report(trigger_state='passing', presence=0.2)
+        self.camera.refresh_from_db()
+        self.assertEqual(self.camera.agent_trigger['state'], 'passing')
+
     def test_junk_is_dropped(self):
         self.report(trigger_state='sideways', motion='lots', presence=None, fps=True)
         self.camera.refresh_from_db()

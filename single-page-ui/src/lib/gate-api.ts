@@ -295,9 +295,12 @@ export interface SimulatorState {
 
 export type Direction = 'in' | 'out';
 
+/** Which vehicles a camera reads: every one, or only those coming toward / going away from it. */
+export type TravelDirection = 'any' | 'toward' | 'away';
+
 /** What the agent's trigger last measured on a camera. */
 export interface TriggerReadout {
-  state?: 'idle' | 'motion' | 'occupied';
+  state?: 'idle' | 'motion' | 'occupied' | 'passing';
   fps?: number;
   motion?: number;
   presence?: number;
@@ -390,6 +393,7 @@ export interface Camera {
   motion_threshold: number;
   settle_ms: number;
   cooldown_s: number;
+  travel_direction: TravelDirection;
   config_version: number;
   updated_by: string | null;
   updated_at: string | null;
@@ -427,6 +431,7 @@ export interface CameraInput {
   motion_threshold: number;
   settle_ms: number;
   cooldown_s: number;
+  travel_direction: TravelDirection;
   /** Replaces the camera's gate assignments; left out, they are kept. */
   gates?: CameraGateLink[];
 }

@@ -326,6 +326,11 @@ class Camera(models.Model):
         ('dahua', 'Dahua'),
         ('generic', 'Generic'),
     ]
+    TRAVEL_DIRECTIONS = [
+        ('any', 'Every vehicle'),
+        ('toward', 'Vehicles coming toward the camera'),
+        ('away', 'Vehicles going away from the camera'),
+    ]
 
     name = models.CharField(max_length=100)
     is_enabled = models.BooleanField(default=True)
@@ -351,6 +356,12 @@ class Camera(models.Model):
     motion_threshold = models.FloatField(default=0.02, validators=_unit_validators)
     settle_ms = models.PositiveIntegerField(default=800)
     cooldown_s = models.PositiveIntegerField(default=5)
+    travel_direction = models.CharField(
+        max_length=8, choices=TRAVEL_DIRECTIONS, default='any',
+        help_text='Which vehicles this camera reads. When two cameras watch the same lane from '
+                  'either end, each sees every vehicle; reading only those coming toward it '
+                  'gives one event per vehicle, in the right direction, with its front plate.',
+    )
     config_version = models.PositiveIntegerField(default=1, editable=False)
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,

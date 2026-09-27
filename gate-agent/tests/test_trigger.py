@@ -4,7 +4,8 @@ import unittest
 from PIL import Image, ImageDraw, ImageFilter
 
 from gate_agent.trigger import (
-    IDLE, MOTION, OCCUPIED, PresenceTrigger, difference, prepare, texture_difference,
+    AWAY, IDLE, MOTION, OCCUPIED, PASSING, TOWARD, PresenceTrigger, changed_row, difference, pixels,
+    prepare, texture_difference,
 )
 
 
@@ -219,6 +220,100 @@ class ShadowFilterTest(unittest.TestCase):
         frames = [with_shadow(car, 0, right) for right in (60, 120, 180)] + [with_shadow(car, 0, 180)] * 6
         self.assertEqual(feed(trigger, self.clock, [prepare(f) for f in frames]), [])
         self.assertEqual(trigger.attempts, 1)
+
+
+def car_at(image, y):
+    """The lane with a car whose top edge is at row y; it drives down the picture as y grows."""
+    car = image.copy()
+    draw = ImageDraw.Draw(car)
+    draw.rectangle([80, y, 240, y + 90], fill=(55, 60, 70))               # body
+    draw.rectangle([100, y + 8, 220, y + 35], fill=(20, 25, 30))          # windscreen
+    draw.rectangle([85, y + 45, 110, y + 58], fill=(230, 230, 200))       # headlights
+    draw.rectangle([210, y + 45, 235, y + 58], fill=(230, 230, 200))
+    draw.rectangle([140, y + 62, 180, y + 78], fill=(235, 235, 235))      # plate
+    return car
+
+
+class TravelDirectionTest(unittest.TestCase):
+    """Two cameras watch one lane from either end; each reads only vehicles coming toward it."""
+
+    def setUp(self):
+        self.clock = Clock()
+        self.lane = road()
+
+    def trigger(self, travel_direction='toward', **kwargs):
+        trigger = PresenceTrigger(motion_threshold=0.02, settle_ms=800, cooldown_s=5, max_attempts=2,
+                                  shadow_filter=True, travel_direction=travel_direction, **kwargs)
+        feed(trigger, self.clock, [prepare(self.lane)] * 5)
+        return trigger
+
+    def drive(self, trigger, rows, stop=True):
+        frames = [car_at(self.lane, y) for y in rows]
+        if stop:
+            frames += [car_at(self.lane, rows[-1])] * 5
+        return feed(trigger, self.clock, [prepare(f) for f in frames])
+
+    def clear(self, trigger):
+        return feed(trigger, self.clock, [prepare(self.lane)] * 6)
+
+    def test_a_vehicle_coming_toward_the_camera_is_read(self):
+        trigger = self.trigger()
+        self.assertEqual(len(self.drive(trigger, [-70, -40, -10, 20, 50, 80])), 1)
+        self.assertEqual(trigger.heading, TOWARD)
+        self.assertEqual(trigger.state, OCCUPIED)
+
+    def test_a_vehicle_going_away_is_not_read_until_the_lane_clears(self):
+        trigger = self.trigger()
+        self.assertEqual(self.drive(trigger, [120, 90, 60, 30, 10]), [])
+        self.assertEqual(trigger.state, PASSING)
+        self.assertEqual(trigger.heading, AWAY)
+        self.assertEqual(trigger.passed, 1)
+        # Still standing there: still not read, however long the cooldown
+        self.assertEqual(feed(trigger, self.clock, [prepare(car_at(self.lane, 10))] * 30), [])
+        # It leaves; the next vehicle, coming this way, is read
+        self.clear(trigger)
+        self.assertEqual(trigger.state, IDLE)
+        self.assertEqual(len(self.drive(trigger, [-70, -40, -10, 20, 50, 80])), 1)
+
+    def test_a_vehicle_driving_away_without_stopping_is_not_read(self):
+        trigger = self.trigger(moving_read_seconds=1.0)
+        fired = self.drive(trigger, [120, 100, 80, 60, 40, 20, 0, -20, -40, -60, -80, -100], stop=False)
+        self.assertEqual(fired, [])
+        self.clear(trigger)
+        self.assertEqual(trigger.state, IDLE)
+
+    def test_the_other_camera_reads_it(self):
+        trigger = self.trigger(travel_direction=AWAY)
+        self.assertEqual(len(self.drive(trigger, [120, 90, 60, 30, 10])), 1)
+
+    def test_every_vehicle_is_read_by_default(self):
+        for rows in ([-70, -40, -10, 20, 50, 80], [120, 90, 60, 30, 10]):
+            trigger = self.trigger(travel_direction='any')
+            self.assertEqual(len(self.drive(trigger, rows)), 1, rows)
+        self.assertEqual(PresenceTrigger(travel_direction='sideways').travel_direction, 'any')
+
+    def test_a_vehicle_whose_heading_cannot_be_told_is_read(self):
+        # It appears in place (a gap in the stream, or it crept in): better read than missed
+        trigger = self.trigger()
+        self.assertEqual(len(self.drive(trigger, [40])), 1)
+        self.assertIsNone(trigger.heading)
+
+    def test_a_vehicle_parked_the_wrong_way_becomes_background(self):
+        trigger = self.trigger(max_occupied_seconds=10)
+        self.drive(trigger, [120, 90, 60, 30, 10])
+        feed(trigger, self.clock, [prepare(car_at(self.lane, 10))] * 30)
+        self.assertEqual(trigger.state, IDLE)
+
+    def test_changed_row(self):
+        lane = prepare(self.lane)
+        width = lane.size[0]
+        empty = pixels(lane)
+        self.assertIsNone(changed_row(empty, empty, width))
+        top = changed_row(pixels(prepare(car_at(self.lane, 0))), empty, width)
+        bottom = changed_row(pixels(prepare(car_at(self.lane, 85))), empty, width)
+        self.assertLess(top, bottom)
+        self.assertIsNone(changed_row(empty, empty[:-1], width))
+        self.assertIsNone(changed_row(empty, empty, 0))
 
 
 class ShadowFilterSettingsTest(unittest.TestCase):

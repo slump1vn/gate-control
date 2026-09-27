@@ -59,6 +59,7 @@ def serialize_camera(c):
         'motion_threshold': c.motion_threshold,
         'settle_ms': c.settle_ms,
         'cooldown_s': c.cooldown_s,
+        'travel_direction': c.travel_direction,
         'config_version': c.config_version,
         'updated_by': c.updated_by.get_username() if c.updated_by else None,
         'updated_at': iso(c.updated_at),

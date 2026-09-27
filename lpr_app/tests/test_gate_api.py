@@ -254,6 +254,36 @@ class CameraGateAssignmentTest(ApiTestBase):
         self.assertTrue(GateCamera.objects.exists())
 
 
+@override_settings(**SETTINGS)
+class CameraTravelDirectionTest(ApiTestBase):
+    """Which vehicles a camera reads, for two cameras watching one lane from either end."""
+
+    def setUp(self):
+        super().setUp()
+        self.as_admin()
+        self.gate = GateDevice.objects.create(name='West')
+        self.camera = Camera.objects.create(name='Cam', host='192.168.1.64')
+        GateCamera.objects.create(gate=self.gate, camera=self.camera, direction='in')
+        self.url = f'/api/v1/gate/cameras/{self.camera.id}/'
+
+    def test_every_vehicle_by_default(self):
+        self.assertEqual(self.client.get(self.url).json()['travel_direction'], 'any')
+
+    def test_set_audited_and_sent_to_the_agent(self):
+        data = self.send('patch', self.url, {'travel_direction': 'toward'}).json()
+        self.assertEqual(data['travel_direction'], 'toward')
+        self.assertEqual(data['config_version'], 2)
+        change = GateConfigChange.objects.get(object_type='camera', object_id=self.camera.id)
+        self.assertEqual(change.changes['travel_direction'], {'old': 'any', 'new': 'toward'})
+        config = self.client.get('/api/v1/gate/agent-config/', **AGENT).json()
+        self.assertEqual(config['gates'][0]['cameras'][0]['travel_direction'], 'toward')
+
+    def test_unknown_value_refused(self):
+        response = self.send('patch', self.url, {'travel_direction': 'sideways'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('travel_direction', response.json()['errors'])
+
+
 def _result(ok=True, image=b'\xff\xd8img'):
     result = ConnectionTestResult()
     result.steps = [TestStep('host', True, 'ok'), TestStep('rtsp_port', True, 'ok'),
