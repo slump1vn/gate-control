@@ -8,6 +8,7 @@ import type { AccessEvent, GateStatusResponse } from '@/lib/gate-api';
 import { usePolling } from '@/hooks/usePolling';
 import RequireRole from '@/components/RequireRole';
 import LiveCameraView from '@/components/LiveCameraView';
+import LiveCameraLightbox from '@/components/LiveCameraLightbox';
 import TriggerReadout from '@/components/TriggerReadout';
 import BarrierArm from '@/components/BarrierArm';
 import CameraStatusBadge from '@/components/CameraStatusBadge';
@@ -41,6 +42,9 @@ function MonitorContent() {
   const [error, setError] = useState<string | null>(null);
   const [intervalMs, setIntervalMs] = useState(1000);
   const [showRoi, setShowRoi] = useState(true);
+  // The camera shown in the lightbox, by id so it follows each status refresh
+  const [enlarged, setEnlarged] = useState<{ gateId: number; cameraId: number } | null>(null);
+  const closeLightbox = useCallback(() => setEnlarged(null), []);
 
   useEffect(() => { getApiBase().then(setApiBase); }, []);
 
@@ -63,6 +67,8 @@ function MonitorContent() {
   usePolling(loadEvents, EVENT_POLL_MS);
 
   const gates = status?.gates ?? [];
+  const enlargedGate = enlarged && gates.find((g) => g.id === enlarged.gateId);
+  const enlargedCamera = enlargedGate && enlargedGate.cameras.find((c) => c.id === enlarged.cameraId);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -114,8 +120,10 @@ function MonitorContent() {
                       <LiveCameraView
                         cameraId={cam.id}
                         apiBase={apiBase}
-                        intervalMs={intervalMs}
+                        // Paused under the lightbox: one stream of a lane at a time is enough
+                        intervalMs={enlarged ? 0 : intervalMs}
                         streamUrl={cam.live_stream_url}
+                        onOpen={() => setEnlarged({ gateId: gate.id, cameraId: cam.id })}
                         roi={cam.roi}
                         showRoi={showRoi}
                       />
@@ -177,6 +185,17 @@ function MonitorContent() {
           {t('monitor.allEvents')}
         </Link>
       </section>
+
+      {enlargedGate && enlargedCamera && (
+        <LiveCameraLightbox
+          camera={enlargedCamera}
+          gateName={enlargedGate.name}
+          apiBase={apiBase}
+          intervalMs={intervalMs}
+          showRoi={showRoi}
+          onClose={closeLightbox}
+        />
+      )}
     </div>
   );
 }

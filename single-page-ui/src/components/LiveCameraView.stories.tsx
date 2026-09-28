@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
-import { expect, waitFor, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import LiveCameraView from './LiveCameraView';
 import { mockSnapshot } from '@/lib/gate-mock-data';
 
@@ -43,5 +43,18 @@ export const VideoUnavailable: Story = {
     await waitFor(() => expect(canvas.getByAltText('Live camera view')).toBeInTheDocument(), { timeout: 12000 });
     await waitFor(() => expect(canvas.getByText(/Authentication failed/)).toBeInTheDocument(), { timeout: 8000 });
     expect(canvas.queryByLabelText('Live camera video')).not.toBeInTheDocument();
+  },
+};
+
+/** On the monitor a click, Enter or Space opens the lane larger. */
+export const Clickable: Story = {
+  args: { onOpen: fn() },
+  play: async ({ args, canvasElement }) => {
+    const view = within(canvasElement).getByRole('button', { name: 'Phóng to' });
+    await userEvent.click(view);
+    await expect(args.onOpen).toHaveBeenCalledTimes(1);
+    view.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(args.onOpen).toHaveBeenCalledTimes(2);
   },
 };

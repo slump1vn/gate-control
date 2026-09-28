@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { Roi } from '@/lib/gate-api';
 import { cameraSnapshotError, cameraSnapshotPath } from '@/lib/gate-api';
 import { liveStreamSupported, playLiveStream } from '@/lib/live-stream';
@@ -21,6 +22,8 @@ interface LiveCameraViewProps {
   initialSrc?: string;
   /** Looks up why a frame failed; defaults to the API. */
   errorLookup?: (cameraId: number) => Promise<string>;
+  /** Makes the view a button, e.g. to open it larger. */
+  onOpen?: () => void;
 }
 
 const ERROR_BACKOFF_MS = 3000;
@@ -36,7 +39,7 @@ const STREAM_RETRY_MS = 60000;
  */
 export default function LiveCameraView({
   cameraId, apiBase, intervalMs, streamUrl, roi, showRoi = true, initialSrc,
-  errorLookup = cameraSnapshotError,
+  errorLookup = cameraSnapshotError, onOpen,
 }: LiveCameraViewProps) {
   const { t } = useI18n();
   const paused = intervalMs <= 0;
@@ -124,7 +127,23 @@ export default function LiveCameraView({
   const showFrame = !!src && !(useVideo && playing);
 
   return (
-    <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video flex items-center justify-center">
+    <div
+      className={`relative bg-gray-900 rounded-lg overflow-hidden aspect-video flex items-center justify-center ${
+        onOpen ? 'cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500' : ''}`}
+      {...(onOpen && {
+        role: 'button',
+        tabIndex: 0,
+        title: t('live.enlarge'),
+        'aria-label': t('live.enlarge'),
+        onClick: onOpen,
+        onKeyDown: (e: ReactKeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onOpen();
+          }
+        },
+      })}
+    >
       {showFrame && (
         // eslint-disable-next-line @next/next/no-img-element -- session-authenticated API image, refreshed by src
         <img src={src} alt="Live camera view" onLoad={onLoad} onError={onError}

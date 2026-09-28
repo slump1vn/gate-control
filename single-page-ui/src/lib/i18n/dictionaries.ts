@@ -73,6 +73,7 @@ export const en = {
   'live.paused': 'Live view paused',
   'live.live': 'Live',
   'live.video': 'Live video',
+  'live.enlarge': 'Open larger',
   'live.stale': 'No new frame',
   'live.cameraRefusing': 'The camera is refusing snapshots. It also serves the gate agent — try a slower refresh.',
 
@@ -516,6 +517,7 @@ export const vi: Dictionary = {
   'live.paused': 'Đã tạm dừng',
   'live.live': 'Trực tiếp',
   'live.video': 'Video trực tiếp',
+  'live.enlarge': 'Phóng to',
   'live.stale': 'Không có ảnh mới',
   'live.cameraRefusing': 'Camera đang từ chối. Nó còn phải phục vụ gate-agent — hãy giảm tốc độ làm mới.',
 
