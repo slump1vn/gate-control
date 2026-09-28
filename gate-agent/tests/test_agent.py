@@ -539,6 +539,100 @@ class FrameRateAndBufferTest(unittest.TestCase):
         self.assertLessEqual(len(worker.recent), 2)
 
 
+def solid(value):
+    return Image.new('RGB', (64, 36), (value, value, value))
+
+
+def shade(jpeg):
+    """The grey level of a solid frame after a JPEG round trip."""
+    return Image.open(io.BytesIO(jpeg)).convert('L').getpixel((32, 18))
+
+
+def car_left_edge(jpeg):
+    """First column (from the left) of a burst frame where the dark car begins."""
+    image = Image.open(io.BytesIO(jpeg)).convert('L')
+    width, height = image.size
+    for x in range(width):
+        if image.getpixel((x, height // 2)) < 90:
+            return x
+    return width
+
+
+class ArrivalBurstTest(unittest.TestCase):
+    """A new vehicle is read from frames spread over its way into the zone, not only its last moment."""
+
+    def worker(self, frames=(), gate=None, **kw):
+        gate = gate or gate_config()
+        return GateWorker(
+            gate, gate['cameras'][0], config(), settings(**kw), mock.Mock(), None,
+            source_factory=lambda camera: FakeSource(frames),
+            clock=Clock(), sleep=lambda s: None,
+        )
+
+    def test_spread(self):
+        from gate_agent.agent import spread
+        items = list(range(10))
+        self.assertEqual(spread(items, 3), [0, 4, 9])
+        self.assertEqual(spread(items, 2), [0, 9])
+        self.assertEqual(spread(items, 1), [9])
+        self.assertEqual(spread([1, 2], 3), [1, 2])
+
+    def test_a_new_vehicle_is_read_across_its_way_in(self):
+        worker = self.worker()
+        worker.arrival = [solid(20 * i) for i in range(10)]
+        worker.trigger.attempts = 1
+        sent = worker.capture_burst(solid(250))
+        self.assertEqual([round(shade(f) / 20) for f in sent], [0, 4, 9])
+        self.assertEqual(worker.arrival, [])
+
+    def test_a_retry_uses_the_frames_around_the_trigger(self):
+        worker = self.worker()
+        worker.arrival = [solid(20 * i) for i in range(10)]
+        worker.recent.extend([solid(200), solid(220), solid(240)])
+        worker.trigger.attempts = 2
+        sent = worker.capture_burst(solid(240))
+        self.assertEqual([round(shade(f) / 20) for f in sent], [10, 11, 12])
+
+    def test_the_way_in_is_thinned_not_cut(self):
+        worker = self.worker()
+        worker.trigger.state = 'motion'
+        for i in range(40):
+            worker._follow_arrival(solid(i), 'motion', False, True)
+        self.assertLessEqual(len(worker.arrival), 16)
+        # The first frame of the way in survives the thinning
+        self.assertEqual(worker.arrival[0].getpixel((0, 0))[0], 0)
+
+    def test_a_vehicle_driving_in_is_read_from_where_it_entered(self):
+        lane = [frame()] * 4
+        way_in = [frame(car=True, offset=o) for o in (-190, -150, -110, -70, -30)]
+        stopped = [frame(car=True, offset=-30)] * 6
+        # A flat block of colour is no vehicle to the shadow filter; that is tested elsewhere
+        # moving_read off: the fake clock runs 0.4s a call, several calls a frame, and
+        # would read the car before it has come in; here it is read when it stops
+        worker = self.worker(lane + way_in + stopped, shadow_filter=False, moving_read_seconds=0)
+        worker.api.decide.return_value = {'decision': 'denied', 'reason': 'no_plate', 'actuate': False,
+                                          'event_id': 1}
+        worker.run()
+        sent = worker.api.decide.call_args_list[0].args[1]
+        self.assertEqual(len(sent), 3)
+        edges = [car_left_edge(f) for f in sent]
+        # The first frame shows the car further out than the last: the burst spans its arrival
+        self.assertGreater(edges[-1] - edges[0], 0, edges)
+
+    def test_recognition_gets_a_margin_around_the_zone(self):
+        gate = gate_config()
+        gate['cameras'][0]['roi'] = {'x': 0.25, 'y': 0.25, 'w': 0.5, 'h': 0.5}
+        worker = self.worker([frame()], gate=gate)
+        full = frame()
+        self.assertEqual(worker._grab().size, (160, 90))
+        self.assertEqual(worker._read_crop(full).size, (224, 126))
+        worker.settings.read_margin = 0
+        self.assertEqual(worker._read_crop(full).size, (160, 90))
+        # Clamped at the edge of the frame
+        worker.settings.read_margin = 0.5
+        self.assertEqual(worker._read_crop(full).size, (320, 180))
+
+
 class MovingVehicleTest(unittest.TestCase):
     """A vehicle that rolls through without stopping is still read."""
 

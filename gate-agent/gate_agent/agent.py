@@ -19,12 +19,24 @@ from . import metrics
 from .api import ApiError
 from .camera import CameraError, EndOfSource, SnapshotSource, build_source, crop_roi, encode_jpeg
 from .controller import ControllerClient, ControllerError
-from .trigger import PresenceTrigger, prepare
+from .trigger import IDLE, MOTION, PASSING, PresenceTrigger, prepare
 
 logger = logging.getLogger('gate_agent')
 
 RECONNECT_BACKOFF = (1, 2, 5, 10, 30)
 DIRECTION_LABELS = {'in': 'entry', 'out': 'exit'}
+# Frames kept of one vehicle's way into the zone (thinned beyond this)
+MAX_ARRIVAL_FRAMES = 16
+
+
+def spread(frames, wanted):
+    """`wanted` frames evenly spaced from the first to the last, in order."""
+    if len(frames) <= wanted:
+        return list(frames)
+    if wanted == 1:
+        return [frames[-1]]
+    last = len(frames) - 1
+    return [frames[round(i * last / (wanted - 1))] for i in range(wanted)]
 
 
 def make_controller(gate):
@@ -72,9 +84,21 @@ class GateWorker(threading.Thread):
         # The frames just before the trigger show the vehicle arriving, which is
         # often a better view of the plate than anything captured afterwards.
         self.recent = collections.deque(maxlen=max(1, settings.prebuffer_frames))
+        # Every frame since the current vehicle entered the zone (thinned when
+        # long): a vehicle coming toward the camera shows its whole plate while
+        # still some way off, and may be too close to read by the time it fires.
+        self.arrival = []
 
     # -- camera ---------------------------------------------------------
     def _grab(self):
+        """The next frame, cropped to the read zone the trigger watches."""
+        return crop_roi(self._grab_full(), self.camera.get('roi'))
+
+    def _read_crop(self, full):
+        """What recognition gets: the read zone plus a margin, so a plate at its edge is whole."""
+        return crop_roi(full, self.camera.get('roi'), self.settings.read_margin)
+
+    def _grab_full(self):
         if self.source is None:
             self.source = self.source_factory(self.camera)
             logger.info('Gate %s: camera source %s', self.label, self.source.describe())
@@ -88,7 +112,7 @@ class GateWorker(threading.Thread):
         metrics.GRAB_SECONDS.labels(gate=self.label).observe(max(0.0, self.clock() - started))
         metrics.FRAMES.labels(gate=self.label, result='ok').inc()
         self.camera_status = 'streaming'
-        return crop_roi(frame, self.camera.get('roi'))
+        return frame
 
     def _warn_about_snapshot_rate(self):
         """Snapshots cost the camera a request per frame; RTSP costs one connection."""
@@ -119,8 +143,10 @@ class GateWorker(threading.Thread):
         measured = _FrameRate()
         while not self.stop_event.is_set():
             try:
-                frame = self._grab()
+                full = self._grab_full()
                 failures = 0
+                zone = crop_roi(full, self.camera.get('roi'))
+                frame = self._read_crop(full)
                 self.recent.append(frame)
                 fps = measured.tick(self.clock())
                 if fps is not None:
@@ -128,7 +154,8 @@ class GateWorker(threading.Thread):
                     metrics.FPS.labels(gate=self.label).set(fps)
 
                 passed = self.trigger.passed
-                fired = self.trigger.update(prepare(frame), self.clock())
+                before = self.trigger.state
+                fired = self.trigger.update(prepare(zone), self.clock())
                 if self.trigger.passed != passed:
                     metrics.PASSED.labels(gate=self.label).inc()
                     logger.info('Gate %s: vehicle heading %s, not %s; not read',
@@ -137,6 +164,7 @@ class GateWorker(threading.Thread):
                 metrics.MOTION.labels(gate=self.label).set(motion)
                 metrics.PRESENCE.labels(gate=self.label).set(presence)
                 metrics.PRESENCE_THRESHOLD.labels(gate=self.label).set(self.trigger.presence_threshold)
+                self._follow_arrival(frame, before, fired, presence > self.trigger.presence_threshold)
                 if fired:
                     self.handle_trigger(frame)
             except EndOfSource:
@@ -186,17 +214,34 @@ class GateWorker(threading.Thread):
         }
 
     # -- one vehicle ----------------------------------------------------
+    def _follow_arrival(self, frame, before, fired, present):
+        """Keep the frames of the vehicle now arriving, from the moment it entered the zone."""
+        if before == IDLE or self.trigger.state in (IDLE, PASSING):
+            # A new vehicle starts here, or there is none to read
+            self.arrival = []
+        if present and (self.trigger.state == MOTION or fired):
+            if len(self.arrival) >= MAX_ARRIVAL_FRAMES:
+                # Thin rather than drop the oldest: the first frames are the ones worth keeping
+                self.arrival = self.arrival[::2]
+            self.arrival.append(frame)
+
     def capture_burst(self, first_frame):
         wanted = max(1, self.config.get('burst_frames', 3))
-        # Newest first: the frames around the trigger, then older ones
-        frames = list(self.recent)[-wanted:] or [first_frame]
-        if first_frame not in frames:
-            frames.append(first_frame)
-        frames = frames[-wanted:]
+        arrival, self.arrival = self.arrival, []
+        if len(arrival) >= 2 and self.trigger.attempts <= 1:
+            # A new vehicle: frames spread over its way in, from where it came
+            # into the zone to where it fired
+            frames = spread(arrival, wanted)
+        else:
+            # A retry, or no way in to go on: the frames around the trigger
+            frames = list(self.recent)[-wanted:] or [first_frame]
+            if first_frame not in frames:
+                frames.append(first_frame)
+            frames = frames[-wanted:]
         while len(frames) < wanted:
             self.sleep(self.settings.burst_interval)
             try:
-                frames.append(self._grab())
+                frames.append(self._read_crop(self._grab_full()))
             except (CameraError, EndOfSource):
                 break
         max_bytes = self.config.get('max_upload_bytes', 2 * 1024 * 1024)

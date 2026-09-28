@@ -31,7 +31,8 @@ python -m gate_agent replay --gate 1 ./recorded-frames      # recorded frames th
 | `AGENT_COMMAND_POLL_INTERVAL` | `1` | Seconds between manual-command polls |
 | `AGENT_STATUS_INTERVAL` | `15` | Seconds between camera status reports |
 | `AGENT_FRAME_INTERVAL` | `0.2` | Seconds between frames for the presence trigger (the loop paces itself, so this is the real rate) |
-| `AGENT_PREBUFFER_FRAMES` | `3` | Frames kept from before the trigger, used as the recognition burst |
+| `AGENT_PREBUFFER_FRAMES` | `3` | Frames kept from before the trigger, used as the burst for a retry (a new vehicle is read from its way in) |
+| `AGENT_READ_MARGIN` | `0.1` | Recognition gets the read zone widened by this fraction of the frame on every side, so a plate at the zone's edge is whole; the trigger still watches the zone itself |
 | `AGENT_MOVING_READ_SECONDS` | `1.0` | Read a vehicle that never stops after this long in the zone (`0` waits for a stop) |
 | `AGENT_SHADOW_FILTER` | `true` | A brightness change only counts as presence if it also changes the lane's texture, so a shadow sweeping across the zone is not taken for a vehicle |
 | `AGENT_SHADOW_TEXTURE_THRESHOLD` | `0.025` | Texture change at which it counts. Measured on a real lane: shadows 0.010–0.024, vehicles 0.028 and up |
@@ -71,9 +72,13 @@ the newest frame, never a buffered one.
 
 **3. When the read fires.** A vehicle that stops is read once it has been still
 for `settle_ms`. A vehicle that rolls through never stops, so it is read anyway
-after `AGENT_MOVING_READ_SECONDS` in the zone. The burst itself uses the frames
-kept from *before* the trigger (`AGENT_PREBUFFER_FRAMES`), which show the vehicle
-arriving, rather than frames captured afterwards when it may already have moved on.
+after `AGENT_MOVING_READ_SECONDS` in the zone. The burst for a new vehicle is
+spread over its way in, from the frame it entered the zone to the frame it fired
+on: a vehicle coming toward the camera shows its whole plate while still some way
+off, and by the time it fires may be too close for the plate to fit in the
+picture. A retry of a waiting vehicle uses the last `AGENT_PREBUFFER_FRAMES`
+frames instead. Every burst frame is the read zone plus `AGENT_READ_MARGIN`, so a
+plate straddling the zone's edge is not cut in half.
 
 If plates are still missed, in order: shrink the read zone to where the plate
 actually is, lower `settle_ms` on the camera, then lower `AGENT_FRAME_INTERVAL`.

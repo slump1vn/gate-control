@@ -243,15 +243,19 @@ def build_source(camera, session=None):
     raise CameraError('Camera has neither a snapshot path nor a stream path')
 
 
-def crop_roi(image, roi):
-    """Crop to a normalised {x, y, w, h} region; the full frame when roi is None."""
+def crop_roi(image, roi, margin=0.0):
+    """
+    Crop to a normalised {x, y, w, h} region; the full frame when roi is None.
+    margin widens the region on every side by that fraction of the frame.
+    """
     if not roi:
         return image
     width, height = image.size
-    left = max(0, int(roi['x'] * width))
-    top = max(0, int(roi['y'] * height))
-    right = min(width, int((roi['x'] + roi['w']) * width))
-    bottom = min(height, int((roi['y'] + roi['h']) * height))
+    margin = max(0.0, margin)
+    left = max(0, int((roi['x'] - margin) * width))
+    top = max(0, int((roi['y'] - margin) * height))
+    right = min(width, int((roi['x'] + roi['w'] + margin) * width))
+    bottom = min(height, int((roi['y'] + roi['h'] + margin) * height))
     if right <= left or bottom <= top:
         return image
     return image.crop((left, top, right, bottom))
