@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Roi } from '@/lib/gate-api';
 import { cameraSnapshotError, cameraSnapshotPath } from '@/lib/gate-api';
+import { liveStreamSupported, playLiveStream } from '@/lib/live-stream';
 import { useI18n } from './I18nContext';
 import { Badge } from './ui';
 
@@ -12,6 +13,8 @@ interface LiveCameraViewProps {
   apiBase: string;
   /** Milliseconds between frames; 0 pauses the view. */
   intervalMs: number;
+  /** The camera's live video WebSocket; without one the view shows frames. */
+  streamUrl?: string | null;
   roi?: Roi | null;
   showRoi?: boolean;
   /** Fixed first frame, for Storybook. */
@@ -21,16 +24,28 @@ interface LiveCameraViewProps {
 }
 
 const ERROR_BACKOFF_MS = 3000;
+const noSubscription = () => () => {};
+// After live video fails, frames are shown for this long before video is tried again
+const STREAM_RETRY_MS = 60000;
 
 /**
- * Live view of a gate lane. Browsers cannot play RTSP, so the LPR service
- * fetches snapshots from the camera and this polls that endpoint, waiting for
- * each frame to load before asking for the next one.
+ * Live view of a gate lane. With a stream URL (go2rtc behind the
+ * live-gateway) it plays the camera's video; otherwise, and whenever the video
+ * fails, it polls the snapshot endpoint, waiting for each frame to load before
+ * asking for the next one.
  */
 export default function LiveCameraView({
-  cameraId, apiBase, intervalMs, roi, showRoi = true, initialSrc, errorLookup = cameraSnapshotError,
+  cameraId, apiBase, intervalMs, streamUrl, roi, showRoi = true, initialSrc,
+  errorLookup = cameraSnapshotError,
 }: LiveCameraViewProps) {
   const { t } = useI18n();
+  const paused = intervalMs <= 0;
+  // False on the server, which cannot know what the browser plays
+  const supported = useSyncExternalStore(noSubscription, liveStreamSupported, () => false);
+  const [streamFailed, setStreamFailed] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const useVideo = !!streamUrl && !paused && supported && !streamFailed;
+
   const [src, setSrc] = useState<string | null>(initialSrc ?? null);
   const [error, setError] = useState<string | null>(null);
   // True when no frame has arrived for a while: the camera or the agent is stuck.
@@ -38,7 +53,31 @@ export default function LiveCameraView({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const staleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stopped = useRef(false);
+  const video = useRef<HTMLVideoElement>(null);
 
+  // -- live video ----------------------------------------------------------
+  useEffect(() => {
+    if (!useVideo || !streamUrl || !video.current) return;
+    return playLiveStream(video.current, streamUrl, {
+      onPlaying: () => {
+        setPlaying(true);
+        setError(null);
+      },
+      onStall: setStale,
+      onFail: () => {
+        setPlaying(false);
+        setStreamFailed(true);
+      },
+    });
+  }, [useVideo, streamUrl]);
+
+  useEffect(() => {
+    if (!streamFailed) return;
+    const retry = setTimeout(() => setStreamFailed(false), STREAM_RETRY_MS);
+    return () => clearTimeout(retry);
+  }, [streamFailed]);
+
+  // -- frames --------------------------------------------------------------
   const next = (delay: number) => {
     if (stopped.current || intervalMs <= 0) return;
     timer.current = setTimeout(() => {
@@ -51,6 +90,7 @@ export default function LiveCameraView({
   };
 
   useEffect(() => {
+    if (useVideo) return;
     stopped.current = false;
     // Scheduled rather than set directly, so the first frame is requested
     // after the effect commits.
@@ -62,7 +102,7 @@ export default function LiveCameraView({
       if (timer.current) clearTimeout(timer.current);
       if (staleTimer.current) clearTimeout(staleTimer.current);
     };
-  }, [cameraId, apiBase, intervalMs]);
+  }, [cameraId, apiBase, intervalMs, useVideo]);
 
   const onLoad = () => {
     setError(null);
@@ -80,12 +120,19 @@ export default function LiveCameraView({
     next(ERROR_BACKOFF_MS);
   };
 
+  // The last frame stays under the video until the video starts
+  const showFrame = !!src && !(useVideo && playing);
+
   return (
     <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video flex items-center justify-center">
-      {src && (
+      {showFrame && (
         // eslint-disable-next-line @next/next/no-img-element -- session-authenticated API image, refreshed by src
         <img src={src} alt="Live camera view" onLoad={onLoad} onError={onError}
-          className={`w-full h-full object-contain ${error ? 'opacity-30' : ''}`} />
+          className={`absolute inset-0 w-full h-full object-contain ${error ? 'opacity-30' : ''}`} />
+      )}
+      {useVideo && (
+        <video ref={video} muted autoPlay playsInline aria-label="Live camera video"
+          className={`absolute inset-0 w-full h-full object-contain ${playing ? '' : 'opacity-0'}`} />
       )}
 
       {showRoi && roi && !error && (
@@ -97,11 +144,11 @@ export default function LiveCameraView({
         </div>
       )}
 
-      {intervalMs <= 0 && !src && (
+      {paused && !src && (
         <p className="text-sm text-gray-400">{t('live.paused')}</p>
       )}
 
-      {error && (
+      {error && !(useVideo && playing) && (
         <div className="absolute inset-x-0 bottom-0 p-2 bg-red-900/80 text-red-100 text-xs">
           {error}
           {/HTTP 5\d\d|timed out/i.test(error) && (
@@ -110,9 +157,11 @@ export default function LiveCameraView({
         </div>
       )}
 
-      {!error && src && (
+      {((useVideo && playing) || (!error && src)) && (
         <div className="absolute top-2 right-2">
-          <Badge color={stale ? 'yellow' : 'green'}>{t(stale ? 'live.stale' : 'live.live')}</Badge>
+          <Badge color={stale ? 'yellow' : 'green'}>
+            {t(stale ? 'live.stale' : useVideo && playing ? 'live.video' : 'live.live')}
+          </Badge>
         </div>
       )}
     </div>

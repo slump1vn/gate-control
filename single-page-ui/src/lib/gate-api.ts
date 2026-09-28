@@ -318,6 +318,8 @@ export interface GateCamera {
   roi: Roi | null;
   agent_status: string | null;
   agent_trigger: TriggerReadout | null;
+  /** The camera's live video WebSocket, or null when the server has no live video. */
+  live_stream_url?: string | null;
 }
 
 export interface GateDevice {

@@ -5,6 +5,7 @@ import os
 
 from django.http import JsonResponse
 
+from ..services import live_stream
 from .auth import primary_role
 
 
@@ -87,6 +88,8 @@ def gate_camera(link):
         'roi': camera.roi,
         'agent_status': camera.agent_status or None,
         'agent_trigger': camera.agent_trigger or None,
+        # The camera's live video WebSocket, or None: the live view then shows JPEG frames
+        'live_stream_url': live_stream.player_url(camera),
     }
 
 

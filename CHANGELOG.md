@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Live video on `/monitor`: with the `gate` profile's new `go2rtc` and `live-gateway` containers and `GATE_LIVE_STREAM_API` set, each lane plays the camera's H.264 sub-stream at its own frame rate (about 25-30 frames/s) instead of one JPEG a second, over a WebSocket at `/live/` that only signed-in operators can open. The view falls back to JPEG frames whenever the video cannot play
 - When the gate agent's last attempt at a read finds no plate in any frame, it takes the read zone as it is as the empty lane (`lpr_gate_agent_relearned_total`). Dappled tree shadow swaying in the wind got past the shadow filter and kept the empty lane from being relearned as the sun moved, so the exit camera at the west gate fired a pair of empty reads every minute or two
 - `GATE_SINGLE_READ_CONFIDENCE` (default 0.95): a registered vehicle allowed in is granted on a single confident read when no other frame of the burst read a different plate. Correct reads of moving vehicles were refused as "no consensus" because only one frame of three showed the plate
 - The gate agent reads a vehicle from frames spread over its way into the read zone, not the last half-second before it fired, and sends recognition the zone plus a margin (`AGENT_READ_MARGIN`, 10% of the frame). A vehicle coming toward the camera was often read when it was already too close, with its plate at the edge of the picture or cut off

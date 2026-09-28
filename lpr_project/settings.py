@@ -232,6 +232,12 @@ GATE_SNAPSHOT_CACHE_SECONDS = config('GATE_SNAPSHOT_CACHE_SECONDS', default=1.0,
 GATE_LIVE_VIEW_SOURCE = 'snapshot' if config('GATE_LIVE_VIEW_SOURCE', default='rtsp').strip().lower() == 'snapshot' else 'rtsp'
 # The live view closes a camera's stream after this long without a viewer
 GATE_LIVE_VIEW_IDLE_SECONDS = config('GATE_LIVE_VIEW_IDLE_SECONDS', default=30.0, cast=float)
+# Live video: go2rtc's internal API (e.g. http://go2rtc:1984). Empty turns live
+# video off and the live view shows JPEG frames as above.
+GATE_LIVE_STREAM_API = config('GATE_LIVE_STREAM_API', default='').strip()
+# Where browsers reach the live-gateway, which passes only the player's
+# WebSocket through to go2rtc: a path on this site, or an absolute ws(s):// URL
+GATE_LIVE_STREAM_PATH = config('GATE_LIVE_STREAM_PATH', default='/live/').strip() or '/live/'
 
 GATE_CAMERA_ALLOWED_CIDRS = config(
     'GATE_CAMERA_ALLOWED_CIDRS',

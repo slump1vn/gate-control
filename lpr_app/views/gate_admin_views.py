@@ -22,7 +22,7 @@ from django.views.decorators.http import require_http_methods
 
 from ..forms import CameraForm, GateDeviceForm, UserForm, VehicleForm
 from ..models import AccessEvent, Camera, GateCamera, GateConfigChange, GateDevice, Vehicle
-from ..services import barrier_simulator, camera_service, config_audit, gate_service
+from ..services import barrier_simulator, camera_service, config_audit, gate_service, live_stream
 from ..utils.auth import primary_role, require_gate_admin, require_gate_operator
 from ..utils.gate_serializers import (
     BadRequest, error, form_errors, json_body, paginate, serialize_camera,
@@ -166,6 +166,28 @@ def api_camera_snapshot(request, camera_id):
     response = HttpResponse(image, content_type='image/jpeg')
     response['Cache-Control'] = 'no-store'
     return response
+
+
+@require_http_methods(["GET"])
+@require_gate_operator
+def api_live_authorize(request):
+    """
+    Asked by the live-gateway (nginx auth_request) before it lets a player's
+    WebSocket through to go2rtc: may this viewer watch the camera named in
+    X-Original-URI? 204 lets it through; anything else refuses it.
+    """
+    if not live_stream.enabled():
+        return error('Live video is off', 'LIVE_STREAM_OFF', status=404)
+    camera_id = live_stream.camera_id_from_uri(request.META.get('HTTP_X_ORIGINAL_URI'))
+    camera = Camera.objects.filter(pk=camera_id).first() if camera_id else None
+    if camera is None or not (camera.sub_stream_path or camera.main_stream_path):
+        return error('Camera not found', 'NOT_FOUND', status=404)
+    try:
+        live_stream.ensure_stream(camera)
+    except live_stream.LiveStreamError as exc:
+        logger.warning('Live video of camera %s unavailable: %s', camera.pk, exc)
+        return error(str(exc), 'LIVE_STREAM_FAILED', status=503)
+    return HttpResponse(status=204)
 
 
 @require_http_methods(["GET"])

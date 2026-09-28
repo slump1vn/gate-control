@@ -20,9 +20,11 @@ import { Alert, Badge, PageHeader, cardClass, formatDateTime, inputClass } from 
 const STATUS_POLL_MS = 2000;
 const EVENT_POLL_MS = 3000;
 
-// The camera also serves the gate agent. Asking it for snapshots faster than
-// once a second makes some models answer HTTP 500, so that is the ceiling here;
-// the service caches frames and will not hit the camera more often anyway.
+// For the frames shown when a camera has no live video (or it failed). The
+// camera also serves the gate agent. Asking it for snapshots faster than once a
+// second makes some models answer HTTP 500, so that is the ceiling here; the
+// service caches frames and will not hit the camera more often anyway. Live
+// video plays at the camera's own rate; Paused stops it too.
 const INTERVALS: { label: keyof Dictionary; value: number }[] = [
   { label: 'monitor.fps.1s', value: 1000 },
   { label: 'monitor.fps.2s', value: 2000 },
@@ -113,6 +115,7 @@ function MonitorContent() {
                         cameraId={cam.id}
                         apiBase={apiBase}
                         intervalMs={intervalMs}
+                        streamUrl={cam.live_stream_url}
                         roi={cam.roi}
                         showRoi={showRoi}
                       />

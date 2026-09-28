@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/nextjs-vite';
+import { expect, waitFor, within } from 'storybook/test';
 import LiveCameraView from './LiveCameraView';
 import { mockSnapshot } from '@/lib/gate-mock-data';
 
@@ -29,3 +30,18 @@ export const WithoutReadZone: Story = { args: { showRoi: false } };
 export const Failing: Story = { args: { initialSrc: '/does-not-exist.jpg' } };
 
 export const Paused: Story = { args: { initialSrc: undefined, intervalMs: 0 } };
+
+/**
+ * Live video that cannot be reached (no live-gateway): the view falls back to
+ * frames. Here the frame endpoint does not exist either, so it ends on the
+ * endpoint's reason, with no video element left behind.
+ */
+export const VideoUnavailable: Story = {
+  args: { intervalMs: 1000, initialSrc: undefined, streamUrl: 'ws://127.0.0.1:9/live/api/ws?src=camera-1' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByAltText('Live camera view')).toBeInTheDocument(), { timeout: 12000 });
+    await waitFor(() => expect(canvas.getByText(/Authentication failed/)).toBeInTheDocument(), { timeout: 8000 });
+    expect(canvas.queryByLabelText('Live camera video')).not.toBeInTheDocument();
+  },
+};

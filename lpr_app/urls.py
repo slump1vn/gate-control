@@ -48,6 +48,7 @@ urlpatterns = [
     path('api/v1/gate/cameras/', gate_admin_views.api_cameras, name='api_cameras'),
     path('api/v1/gate/cameras/presets/', gate_admin_views.api_camera_presets, name='api_camera_presets'),
     path('api/v1/gate/cameras/<int:camera_id>/snapshot/', gate_admin_views.api_camera_snapshot, name='api_camera_snapshot'),
+    path('api/v1/gate/live/authorize/', gate_admin_views.api_live_authorize, name='api_live_authorize'),
     path('api/v1/gate/cameras/test/', gate_admin_views.api_camera_test, name='api_camera_test'),
     path('api/v1/gate/cameras/<int:camera_id>/', gate_admin_views.api_camera_detail, name='api_camera_detail'),
     path('api/v1/gate/devices/', gate_admin_views.api_gate_devices, name='api_gate_devices'),
