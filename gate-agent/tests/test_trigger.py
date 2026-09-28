@@ -113,6 +113,28 @@ class TriggerTest(unittest.TestCase):
         self.assertEqual(trigger.state, IDLE)
         self.assertLess(difference(trigger.background, lane(car_x=60)), 0.01)
 
+    def test_no_plate_on_last_attempt_relearns_the_lane(self):
+        # Something the reads found no plate in (tree shadow) becomes the empty lane
+        self.arrive()
+        self.trigger.decided(False, self.clock.t, empty=True)
+        self.assertEqual(self.trigger.relearned, 0)
+        self.assertEqual(self.trigger.state, OCCUPIED)
+        self.assertEqual(len(feed(self.trigger, self.clock, [lane(car_x=60)] * 15)), 1)
+        self.trigger.decided(False, self.clock.t, empty=True)
+        self.assertEqual(self.trigger.relearned, 1)
+        self.assertEqual(self.trigger.state, IDLE)
+        self.assertEqual(feed(self.trigger, self.clock, [lane(car_x=60)] * 40), [])
+        self.assertEqual(self.trigger.state, IDLE)
+
+    def test_plate_read_on_last_attempt_keeps_the_lane(self):
+        self.arrive()
+        self.trigger.decided(False, self.clock.t)
+        feed(self.trigger, self.clock, [lane(car_x=60)] * 15)
+        self.trigger.decided(False, self.clock.t)
+        self.assertEqual(self.trigger.relearned, 0)
+        self.assertEqual(self.trigger.state, OCCUPIED)
+        self.assertGreater(difference(self.trigger.background, lane(car_x=60)), 0.05)
+
     def test_background_adapts_to_slow_light_change(self):
         for level in range(150, 170):
             image = Image.new('RGB', (320, 180), (level, level, level))

@@ -131,6 +131,19 @@ class GateWorkerTest(unittest.TestCase):
         controller.send.assert_not_called()
         self.assertFalse(worker.trigger.last_granted)
 
+    def test_no_plate_on_last_attempt_relearns_the_lane(self):
+        api = mock.Mock()
+        api.decide.return_value = {'decision': 'denied', 'reason': 'no_plate', 'actuate': False, 'event_id': 3}
+        worker, _ = self.make_worker([], api)
+        worker.trigger.update(prepare(frame()), 0.0)
+        worker.trigger.update(prepare(frame(car=True)), 0.1)
+        worker.trigger.attempts = worker.trigger.max_attempts
+        with self.assertLogs('gate_agent', 'INFO') as logs:
+            worker.handle_trigger(frame(car=True))
+        self.assertEqual(worker.trigger.relearned, 1)
+        self.assertEqual(worker.trigger.state, 'idle')
+        self.assertIn('relearned', '\n'.join(logs.output))
+
     def test_api_failure_is_a_denial(self):
         api = mock.Mock()
         api.decide.side_effect = ApiError('HTTP 500', 500)

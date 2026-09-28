@@ -23,6 +23,9 @@ With travel_direction set, only vehicles heading that way are read. Where two
 cameras watch one lane from either end, each sees every vehicle; a vehicle
 coming toward a camera moves down its picture, one going away moves up. A
 vehicle heading the other way is left alone until the lane clears (PASSING).
+
+When the last attempt at a read finds no plate at all, the zone as it is then
+becomes the empty lane (see decided).
 """
 
 import math
@@ -161,6 +164,8 @@ class PresenceTrigger:
         self.heading = None
         self.passing_since = None
         self.passed = 0
+        # Times the lane was relearned after a read that found no plate
+        self.relearned = 0
 
         self.state = IDLE
         self.background = None
@@ -332,9 +337,25 @@ class PresenceTrigger:
         self.fired_while_moving = moving
         return True
 
-    def decided(self, granted, now):
-        """Report the outcome of the burst started by the last trigger."""
+    def decided(self, granted, now, empty=False):
+        """
+        Report the outcome of the burst started by the last trigger. empty: no
+        plate was found in any frame.
+
+        When the last attempt still finds no plate, what the zone shows is
+        taken as the empty lane. Dappled tree shadow has the texture of a
+        vehicle, so the shadow filter lets it through; and swaying in the wind
+        it never looks calm enough for the background to be learned. Without
+        this, the background stays wherever the shadows were hours ago and
+        every gust reads the lane again.
+        """
         self.awaiting_decision = False
         self.decided_at = now
         self.last_granted = bool(granted)
         self.decision_frame = self.frame
+        if empty and not granted and self.attempts >= self.max_attempts and self.frame is not None:
+            self.background = list(self.frame)
+            self.state = IDLE
+            self.present_since = None
+            self.clear_since = None
+            self.relearned += 1

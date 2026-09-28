@@ -103,8 +103,15 @@ a shadow: a tree swaying, a building's shadow lengthening in the afternoon, or
 the shadow a vehicle casts after it has left the zone. With
 `AGENT_SHADOW_FILTER` on (the default) a change only counts if it also changes
 the texture of the lane: a shadow multiplies the brightness of the road by a
-roughly constant factor, a vehicle brings edges, windows and a plate. If empty
-events remain, look at their frames: a vehicle crossing the edge of the zone
+roughly constant factor, a vehicle brings edges, windows and a plate.
+
+Dappled shadow under a tree has edges of its own and gets through the filter;
+swaying in the wind, it also never looks calm enough for the empty lane to be
+learned again as the sun moves. So when the last attempt at a read finds no
+plate in any frame, the agent takes the zone as it is as the empty lane
+(`lpr_gate_agent_relearned_total`, and a log line). A vehicle whose plate could
+not be seen at all is absorbed the same way and read again when it leaves,
+which is no worse than before. If empty events remain, look at their frames: a vehicle crossing the edge of the zone
 means the zone is too wide; an empty lane means raise
 `AGENT_SHADOW_TEXTURE_THRESHOLD` a little (at the risk of missing dark,
 featureless vehicles).

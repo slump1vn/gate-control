@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- When the gate agent's last attempt at a read finds no plate in any frame, it takes the read zone as it is as the empty lane (`lpr_gate_agent_relearned_total`). Dappled tree shadow swaying in the wind got past the shadow filter and kept the empty lane from being relearned as the sun moved, so the exit camera at the west gate fired a pair of empty reads every minute or two
 - `GATE_SINGLE_READ_CONFIDENCE` (default 0.95): a registered vehicle allowed in is granted on a single confident read when no other frame of the burst read a different plate. Correct reads of moving vehicles were refused as "no consensus" because only one frame of three showed the plate
 - The gate agent reads a vehicle from frames spread over its way into the read zone, not the last half-second before it fired, and sends recognition the zone plus a margin (`AGENT_READ_MARGIN`, 10% of the frame). A vehicle coming toward the camera was often read when it was already too close, with its plate at the edge of the picture or cut off
 - **Vehicles to read** on each camera (`Camera.travel_direction`: every vehicle, coming toward the camera, or going away from it). Where two cameras watch one lane from either end, each saw every vehicle and filed one of its two events under the wrong direction; with both on "coming toward the camera" each vehicle is read once, by the camera it is driving toward, with its front plate and before it reaches the barrier

@@ -286,7 +286,15 @@ class GateWorker(threading.Thread):
             logger.exception('Gate %s: decision request failed', self.label)
             return None
         finally:
-            self.trigger.decided(bool(result and result.get('decision') == 'granted'), self.clock())
+            relearned = self.trigger.relearned
+            self.trigger.decided(
+                bool(result and result.get('decision') == 'granted'), self.clock(),
+                empty=bool(result and result.get('reason') == 'no_plate'),
+            )
+            if self.trigger.relearned != relearned:
+                metrics.RELEARNED.labels(gate=self.label).inc()
+                logger.info('Gate %s: no plate after %d attempts; zone relearned as the empty lane',
+                            self.label, self.trigger.attempts)
 
     def open_barrier(self, event_id):
         if not self.allow_actuation:
