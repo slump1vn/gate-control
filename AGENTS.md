@@ -119,6 +119,7 @@ Barrier control from plate recognition (see `openspec/changes/2026-09-22-anpr-ga
 - `GATE_BURST_FRAMES` — Max frames per decision request (default: `3`)
 - `GATE_CONSENSUS_MIN` — Frames that must agree on a plate before it can be granted (default: `2`)
 - `GATE_MIN_CONFIDENCE` — Minimum OCR confidence among the agreeing frames (default: `0.80`)
+- `GATE_SINGLE_READ_CONFIDENCE` — A plate read in fewer than `GATE_CONSENSUS_MIN` frames is still granted when one read reaches this confidence, no other frame read a different plate (nothing, or part of the same plate, is fine) and it matches a registered vehicle allowed in right now; the event shows `frames_agreed=1`. A moving vehicle often shows its plate in one frame only, and a misread practically never spells out a registered plate. `0` turns it off (default: `0.95`)
 - `GATE_DECIDE_TIMEOUT` — Seconds a decision may take before it is denied as `inference_timeout` (default: `8`)
 - `GATE_WORKER_THREADS` — Frames recognised in parallel per Django worker process (default: `3`)
 - `GATE_COMMAND_TTL_SECONDS` — Manual commands not picked up by the agent within this time expire and are never sent (default: `15`)

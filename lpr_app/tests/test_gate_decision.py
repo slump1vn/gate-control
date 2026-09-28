@@ -165,6 +165,52 @@ class EvaluateTest(TestCase):
         self.assertEqual(evaluate([read('30A12345'), read('30A12345'), read('')]).reason, 'no_consensus')
 
 
+@override_settings(**GATE_SETTINGS, GATE_SINGLE_READ_CONFIDENCE=0.95)
+class SingleReadTest(TestCase):
+    """A moving vehicle often shows its plate in one frame of the burst only."""
+
+    def setUp(self):
+        self.car = Vehicle.objects.create(plate_display='30A-123.45', owner_name='A')
+
+    def test_one_confident_read_of_a_registered_vehicle_is_granted(self):
+        outcome = evaluate([read('', image_id=1), read('30A-123.45', 0.97, image_id=2), read('', image_id=3)])
+        self.assertTrue(outcome.granted)
+        self.assertEqual(outcome.reason, 'whitelist_hit')
+        self.assertEqual((outcome.frames_read, outcome.frames_agreed), (3, 1))
+        self.assertEqual(outcome.match.vehicle, self.car)
+        self.assertEqual(outcome.evidence.image_id, 2)
+
+    def test_part_of_the_same_plate_in_another_frame_is_no_contradiction(self):
+        outcome = evaluate([read('30A12345', 0.97), read('12345', 0.9), read('')])
+        self.assertTrue(outcome.granted)
+
+    def test_a_different_plate_in_another_frame_is(self):
+        outcome = evaluate([read('30A12345', 0.99), read('51F99999', 0.9)])
+        self.assertEqual(outcome.reason, 'no_consensus')
+
+    def test_not_confident_enough(self):
+        self.assertEqual(evaluate([read('30A12345', 0.94), read('')]).reason, 'no_consensus')
+
+    def test_an_unregistered_or_refused_plate_stays_no_consensus(self):
+        self.assertEqual(evaluate([read('51F99999', 0.99), read('')]).reason, 'no_consensus')
+        self.car.valid_until = timezone.now() - timedelta(days=1)
+        self.car.save()
+        self.assertEqual(evaluate([read('30A12345', 0.99), read('')]).reason, 'no_consensus')
+
+    def test_a_misread_that_is_not_a_registered_plate_is_refused(self):
+        # What the gate's own model produced from a grille and a van's lettering
+        for junk in ('.91', 'P DONG', 'OB6.04', '30572'):
+            self.assertFalse(evaluate([read(junk, 0.98), read('')]).granted, junk)
+
+    @override_settings(GATE_SINGLE_READ_CONFIDENCE=0)
+    def test_can_be_turned_off(self):
+        self.assertEqual(evaluate([read('30A12345', 0.99), read('')]).reason, 'no_consensus')
+
+    def test_consensus_is_still_preferred(self):
+        outcome = evaluate([read('30A12345', 0.9), read('30A12345', 0.85), read('')])
+        self.assertEqual((outcome.reason, outcome.frames_agreed), ('whitelist_hit', 2))
+
+
 class ModeTest(SimpleTestCase):
     def test_modes(self):
         for value, expected in (('live', 'live'), ('LIVE', 'live'), ('shadow', 'shadow'), ('', 'shadow'), ('on', 'shadow')):

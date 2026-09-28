@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `GATE_SINGLE_READ_CONFIDENCE` (default 0.95): a registered vehicle allowed in is granted on a single confident read when no other frame of the burst read a different plate. Correct reads of moving vehicles were refused as "no consensus" because only one frame of three showed the plate
 - The gate agent reads a vehicle from frames spread over its way into the read zone, not the last half-second before it fired, and sends recognition the zone plus a margin (`AGENT_READ_MARGIN`, 10% of the frame). A vehicle coming toward the camera was often read when it was already too close, with its plate at the edge of the picture or cut off
 - **Vehicles to read** on each camera (`Camera.travel_direction`: every vehicle, coming toward the camera, or going away from it). Where two cameras watch one lane from either end, each saw every vehicle and filed one of its two events under the wrong direction; with both on "coming toward the camera" each vehicle is read once, by the camera it is driving toward, with its front plate and before it reaches the barrier
 - The gate agent ignores shadows (`AGENT_SHADOW_FILTER`, on by default): a change of brightness in the read zone only counts as a vehicle if it also changes the texture of the lane. Tree shadows and the shadows of vehicles that had already left produced most "no plate" events at the west gate. `AGENT_MOVING_READ_SECONDS` now defaults to 1.0 so a vehicle driving through is read while it is still in the zone

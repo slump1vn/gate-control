@@ -9,6 +9,11 @@ that frame's read. A plate is granted only if at least GATE_CONSENSUS_MIN
 frames agree on it, the best agreeing confidence reaches GATE_MIN_CONFIDENCE,
 and it matches a valid registry entry exactly. Everything else is denied.
 
+A moving vehicle often shows its plate in only one frame of the burst. That
+one read is still enough when it reaches GATE_SINGLE_READ_CONFIDENCE and names
+a vehicle allowed in right now, provided no other frame read a different plate:
+a misread practically never spells out a registered plate.
+
 Only the frame behind the decision is kept, as the event's evidence; the other
 frames are deleted, including frames that finish after the deadline.
 """
@@ -245,6 +250,22 @@ def _conf(read):
     return read.confidence if read.confidence is not None else 0.0
 
 
+def _single_read_match(plate, best, groups, at):
+    """
+    The registry match for a plate too few frames agree on, when its one best
+    read may stand on its own: confident enough, not contradicted by another
+    frame (reading nothing, or part of the same plate, is no contradiction),
+    and naming a vehicle allowed in right now. None otherwise.
+    """
+    threshold = settings.GATE_SINGLE_READ_CONFIDENCE
+    if not 0 < threshold <= 1 or _conf(best) < threshold:
+        return None
+    if any(other != plate and other not in plate for other in groups):
+        return None
+    match = plate_matcher.match(plate, at)
+    return match if match.allowed else None
+
+
 def evaluate(reads, pending=0, at=None):
     """Apply the consensus, confidence and registry rules to a set of frame reads."""
     need = settings.GATE_CONSENSUS_MIN
@@ -266,6 +287,9 @@ def evaluate(reads, pending=0, at=None):
     )
 
     if len(agreeing) < need:
+        match = _single_read_match(plate, best, groups, at)
+        if match is not None:
+            return Outcome(reason=match.reason, match=match, **base)
         reason = 'inference_timeout' if len(agreeing) + pending >= need else 'no_consensus'
         return Outcome(reason=reason, **base)
 

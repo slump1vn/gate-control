@@ -371,6 +371,7 @@ class CameraAdminTest(TestCase):
             'http_port': 80, 'username': 'admin', 'password': 'cam-test-pass', 'vendor': 'hikvision',
             'main_stream_path': '', 'sub_stream_path': '', 'snapshot_path': '',
             'prefer_snapshot': 'on', 'motion_threshold': 0.02, 'settle_ms': 800, 'cooldown_s': 5,
+            'travel_direction': 'any',
         }
         data.update(overrides)
         return self.client.post(url, data)

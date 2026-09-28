@@ -203,6 +203,10 @@ GATE_MODE = config('GATE_MODE', default='shadow')  # shadow | live
 GATE_BURST_FRAMES = config('GATE_BURST_FRAMES', default=3, cast=int)
 GATE_CONSENSUS_MIN = config('GATE_CONSENSUS_MIN', default=2, cast=int)
 GATE_MIN_CONFIDENCE = config('GATE_MIN_CONFIDENCE', default=0.80, cast=float)
+# A plate read in fewer than GATE_CONSENSUS_MIN frames is still granted when one
+# read reaches this confidence, no frame read a different plate, and it matches
+# a registered vehicle allowed in now. 0 turns it off.
+GATE_SINGLE_READ_CONFIDENCE = config('GATE_SINGLE_READ_CONFIDENCE', default=0.95, cast=float)
 GATE_DECIDE_TIMEOUT = config('GATE_DECIDE_TIMEOUT', default=8, cast=int)
 GATE_WORKER_THREADS = config('GATE_WORKER_THREADS', default=3, cast=int)
 GATE_COMMAND_TTL_SECONDS = config('GATE_COMMAND_TTL_SECONDS', default=15, cast=int)
