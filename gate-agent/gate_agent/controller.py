@@ -1,15 +1,21 @@
 """
-Client for the gate controller protocol (design.md §6): the ESP32 relay board,
-or the simulated barrier served by the LPR service. Both speak the same
-contract: POST {base}/open|close|stop with a bearer token and {nonce, ts}.
+Client for the gate controller protocol (design.md §6): the ESP32 relay or
+433 MHz board, or the simulated barrier served by the LPR service. All speak
+the same contract: POST {base}/open|close|stop and GET {base}/status, each
+signed with the controller token (contract v2, see signing.py) so the token
+itself never crosses the network.
 
 The local rate limit is a second line of defence behind the firmware's own.
 """
 
+import json
 import threading
 import time
+from urllib.parse import urlsplit
 
 import requests
+
+from . import signing
 
 MOTION_COMMANDS = ('open', 'close')
 
@@ -39,13 +45,17 @@ class ControllerClient:
         self._last_nonce = max(self._last_nonce + 1, int(self.wall_clock() * 1000))
         return self._last_nonce
 
+    def _signed(self, method, url, body=b''):
+        headers = signing.headers(self.token, method, urlsplit(url).path, self._nonce(),
+                                  int(self.wall_clock()), body)
+        if body:
+            headers['Content-Type'] = 'application/json'
+        return headers
+
     def _post(self, command):
-        return self.session.post(
-            self.base_url + command,
-            json={'nonce': self._nonce(), 'ts': self.wall_clock()},
-            headers={'Authorization': f'Bearer {self.token}'},
-            timeout=self.timeout,
-        )
+        url = self.base_url + command
+        body = json.dumps({}).encode()
+        return self.session.post(url, data=body, headers=self._signed('POST', url, body), timeout=self.timeout)
 
     def send(self, command):
         """Send a command; returns the controller's JSON body. Raises ControllerError."""
@@ -79,9 +89,11 @@ class ControllerClient:
             return {'ok': True}
 
     def status(self):
+        url = self.base_url + 'status'
         try:
-            response = self.session.get(self.base_url + 'status', headers={'Authorization': f'Bearer {self.token}'},
-                                        timeout=self.timeout)
+            with self._lock:
+                headers = self._signed('GET', url)
+            response = self.session.get(url, headers=headers, timeout=self.timeout)
         except requests.RequestException as exc:
             raise ControllerError(f'Controller unreachable: {exc.__class__.__name__}')
         if response.status_code >= 400:

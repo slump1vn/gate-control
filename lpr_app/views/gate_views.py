@@ -24,7 +24,7 @@ from ..models import AccessEvent, Camera, GateDevice
 from ..services import barrier_simulator, gate_service
 from ..services.api_service import ApiService
 from ..services.camera_service import VENDOR_PRESETS
-from ..utils.auth import device_token_matches, require_agent_token, require_gate_operator
+from ..utils.auth import device_request, require_agent_token, require_gate_operator
 from ..utils.gate_serializers import (
     BadRequest, error, iso, json_body, serialize_event, serialize_gate, vehicle_ref,
 )
@@ -257,6 +257,30 @@ def api_gate_agent_status(request):
 # ESP32 controller
 # ---------------------------------------------------------------------------
 
+# A signed heartbeat is refused this far from our clock. A replay inside the
+# window can only refresh last_seen, which the device does every 10s anyway.
+HEARTBEAT_TS_WINDOW_SECONDS = 30
+CONTROLLER_TRANSPORTS = ('relay', 'rf433')
+
+
+def _controller_health(body):
+    """The self-reported health fields of a heartbeat, type-checked; unknown keys are dropped."""
+    health = {}
+    if body.get('transport') in CONTROLLER_TRANSPORTS:
+        health['transport'] = body['transport']
+    rssi = body.get('wifi_rssi')
+    if isinstance(rssi, (int, float)) and not isinstance(rssi, bool) and -120 <= rssi <= 0:
+        health['wifi_rssi'] = int(rssi)
+    for key in ('clock_synced', 'dry_run'):
+        if isinstance(body.get(key), bool):
+            health[key] = body[key]
+    count = body.get('rf_tx_count')
+    if isinstance(count, int) and not isinstance(count, bool) and count >= 0:
+        health['rf_tx_count'] = count
+    if isinstance(body.get('uptime_s'), int) and not isinstance(body.get('uptime_s'), bool):
+        health['uptime_s'] = max(0, body['uptime_s'])
+    return health
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_gate_heartbeat(request):
@@ -265,12 +289,22 @@ def api_gate_heartbeat(request):
     except BadRequest as exc:
         return error(str(exc), 'INVALID_JSON')
     gate = GateDevice.objects.filter(pk=body.get('gate_id')).first() if str(body.get('gate_id', '')).isdigit() else None
+    auth = device_request(request, gate) if gate is not None else None
     # Same response for an unknown gate and a wrong token
-    if gate is None or not device_token_matches(request, gate):
+    if auth is None:
         return error('Permission denied', 'FORBIDDEN', status=403)
+    if auth.version >= 2 and abs(time.time() - auth.ts) > HEARTBEAT_TS_WINDOW_SECONDS:
+        # Genuinely signed, but by a device whose clock is off (just booted, no
+        # NTP): tell it the time. Commands still need fresh signatures and
+        # never-seen nonces, so a wrong time cannot replay one.
+        return error('Device clock out of range', 'CLOCK_SKEW', status=403, server_ts=time.time())
 
     gate.last_seen = timezone.now()
     fields = ['last_seen']
+    health = _controller_health(body)
+    if health:
+        gate.controller_health = health
+        fields.append('controller_health')
     if body.get('firmware_version'):
         gate.firmware_version = str(body['firmware_version'])[:50]
         fields.append('firmware_version')
@@ -282,7 +316,8 @@ def api_gate_heartbeat(request):
         gate.arm_state_at = gate.last_seen
         fields += ['arm_state', 'arm_state_at']
     gate.save(update_fields=fields)
-    return JsonResponse({'success': True, 'server_time': iso(gate.last_seen)})
+    # server_ts lets a device without SNTP set its clock (the signature window needs one)
+    return JsonResponse({'success': True, 'server_time': iso(gate.last_seen), 'server_ts': time.time()})
 
 
 # ---------------------------------------------------------------------------
@@ -358,11 +393,13 @@ def api_gate_event_image(request, event_id, image_type):
 def api_gate_simulator_device(request, gate_id, command):
     """
     Speaks the ESP32 controller protocol for a gate whose controller_type is
-    'simulator': POST open/close/stop with {nonce, ts}, GET status. The agent
-    talks to it exactly as it will talk to the real board.
+    'simulator': POST open/close/stop, GET status, signed per contract v2
+    (utils/gate_signing), or v1 (bearer token, {nonce, ts} in the body) for one
+    release. The agent talks to it exactly as it will talk to the real board.
     """
     gate = GateDevice.objects.filter(pk=gate_id, controller_type='simulator').first()
-    if gate is None or not device_token_matches(request, gate):
+    auth = device_request(request, gate) if gate is not None else None
+    if auth is None:
         return error('Unauthorized', 'UNAUTHORIZED', status=401)
 
     if command == 'status':
@@ -372,11 +409,16 @@ def api_gate_simulator_device(request, gate_id, command):
 
     if request.method != 'POST':
         return error('Use POST for commands', 'METHOD_NOT_ALLOWED', status=405)
+    if auth.version >= 2:
+        # Signed headers: the body is not needed for anything but the signature
+        nonce, ts = auth.nonce, auth.ts
+    else:
+        try:
+            body = json_body(request)
+        except BadRequest as exc:
+            return error(str(exc), 'INVALID_JSON')
+        nonce, ts = body.get('nonce'), body.get('ts')
     try:
-        body = json_body(request)
-    except BadRequest as exc:
-        return error(str(exc), 'INVALID_JSON')
-    try:
-        return JsonResponse(barrier_simulator.execute(gate, command, body.get('nonce'), body.get('ts')))
+        return JsonResponse(barrier_simulator.execute(gate, command, nonce, ts))
     except barrier_simulator.CommandRejected as exc:
         return error(exc.message, 'REJECTED', status=exc.status)

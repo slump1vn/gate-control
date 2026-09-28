@@ -23,3 +23,8 @@ export const NewSimulated: Story = {};
 export const Esp32: Story = {
   args: { gate: { ...mockGateDevice, controller_type: 'esp32', controller_url: 'http://192.168.1.50/' } },
 };
+
+/** ESP32-S3 + CC1101 sending the barrier remote's code. */
+export const Esp32Radio: Story = {
+  args: { gate: { ...mockGateDevice, controller_type: 'esp32_rf', controller_url: 'http://192.168.2.60/' } },
+};

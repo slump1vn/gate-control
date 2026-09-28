@@ -3,6 +3,7 @@ FROM prom/prometheus:latest
 
 # Copy prometheus configuration
 COPY prometheus/prometheus.yml /etc/prometheus/prometheus.yml
+COPY prometheus/gate_rules.yml /etc/prometheus/gate_rules.yml
 
 # Note: Prometheus base image already runs as non-root user by default
 

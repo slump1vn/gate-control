@@ -1,0 +1,37 @@
+# Gate controller alerts. They show on Prometheus' Alerts page; wire an
+# Alertmanager to get them sent anywhere.
+groups:
+  - name: gate-controller
+    rules:
+      - alert: GateControllerDown
+        expr: lpr_gate_controller_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Gate {{ $labels.gate }}: no controller heartbeat for over a minute"
+
+      - alert: GateControllerDryRunWhileLive
+        # The controller validates commands but moves nothing, while decisions expect it to
+        expr: lpr_gate_controller_dry_run == 1 and on() lpr_gate_live_mode == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Gate {{ $labels.gate }}: controller is in dry run but GATE_MODE is live"
+
+      - alert: GateControllerWeakWifi
+        expr: lpr_gate_controller_rssi_dbm < -80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Gate {{ $labels.gate }}: controller WiFi at {{ $value }} dBm"
+
+      - alert: GateArmUpTooLong
+        expr: lpr_gate_arm_up == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Gate {{ $labels.gate }}: barrier arm reported up for over 10 minutes"

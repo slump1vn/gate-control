@@ -9,11 +9,14 @@ that only open their own endpoints.
 
 import functools
 import logging
+from dataclasses import dataclass
+from typing import Optional
 
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
+from . import gate_signing
 from .secrets import SecretDecryptError, SecretKeyMissing, tokens_equal
 
 logger = logging.getLogger(__name__)
@@ -106,11 +109,48 @@ def require_agent_token(view):
     return csrf_exempt(wrapped)
 
 
-def device_token_matches(request, gate):
-    """True if the request carries the gate's controller token."""
+def _controller_token(gate):
     try:
-        expected = gate.get_controller_token()
+        return gate.get_controller_token()
     except (SecretKeyMissing, SecretDecryptError):
         logger.error('Cannot decrypt controller token for gate %s', gate.pk)
-        return False
-    return tokens_equal(bearer_token(request), expected)
+        return ''
+
+
+def device_token_matches(request, gate):
+    """True if the request carries the gate's controller token (contract v1)."""
+    expected = _controller_token(gate)
+    return bool(expected) and tokens_equal(bearer_token(request), expected)
+
+
+@dataclass
+class DeviceAuth:
+    """How a controller-side request proved itself. nonce and ts are None for v1."""
+    version: int
+    nonce: Optional[int] = None
+    ts: Optional[float] = None
+
+
+def device_request(request, gate):
+    """
+    Authenticate a request signed with the gate's controller token (contract
+    v2, see utils/gate_signing), or carrying it as a bearer (v1, accepted for
+    one release while agents and devices move to v2). Returns DeviceAuth, or
+    None when neither proves it.
+
+    The signature covers the nonce and timestamp; checking them against what
+    was seen before, and against the clock, is the caller's business.
+    """
+    signature = request.headers.get(gate_signing.SIGNATURE_HEADER)
+    if signature is None:
+        return DeviceAuth(version=1) if device_token_matches(request, gate) else None
+    nonce = request.headers.get(gate_signing.NONCE_HEADER, '')
+    ts = request.headers.get(gate_signing.TS_HEADER, '')
+    try:
+        parsed = int(nonce), float(ts)
+    except ValueError:
+        return None
+    if not gate_signing.verify(_controller_token(gate), request.method, request.path, nonce, ts,
+                               request.body, signature):
+        return None
+    return DeviceAuth(version=2, nonce=parsed[0], ts=parsed[1])

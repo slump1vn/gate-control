@@ -3,7 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { ApiError } from '@/lib/gate-api';
 import { useI18n } from './I18nContext';
-import type { Direction, GateDevice, GateDeviceInput } from '@/lib/gate-api';
+import type { ControllerType, Direction, GateDevice, GateDeviceInput } from '@/lib/gate-api';
 import { Alert, Badge, Checkbox, Field, inputClass, primaryButton, secondaryButton } from './ui';
 
 interface GateDeviceFormProps {
@@ -104,11 +104,13 @@ export default function GateDeviceForm({ gate, cameras, onSubmit, onCancel }: Ga
           </select>
         </Field>
         <Field label={t('gateForm.controller')} htmlFor="gate-controller-type" error={errors.controller_type}
-          hint={t(simulated ? 'gateForm.simulatorHint' : 'gateForm.esp32Hint')}>
+          hint={t(simulated ? 'gateForm.simulatorHint'
+            : data.controller_type === 'esp32_rf' ? 'gateForm.esp32RfHint' : 'gateForm.esp32Hint')}>
           <select id="gate-controller-type" className={inputClass} value={data.controller_type}
-            onChange={(e) => set('controller_type', e.target.value as 'esp32' | 'simulator')}>
+            onChange={(e) => set('controller_type', e.target.value as ControllerType)}>
             <option value="simulator">{t('gateForm.simulator')}</option>
             <option value="esp32">{t('gateForm.esp32')}</option>
+            <option value="esp32_rf">{t('gateForm.esp32Rf')}</option>
           </select>
         </Field>
         {!simulated && (

@@ -193,6 +193,27 @@ export const mockGateStatusEsp32Offline: GateStatus = {
   last_event: mockEventNearMiss,
 };
 
+/** An ESP32 + 433 MHz remote gate still in dry run, with weak WiFi and no clock yet. */
+export const mockGateStatusRadioDryRun: GateStatus = {
+  ...mockGateStatusEsp32Offline,
+  id: 4,
+  name: 'Cổng tây',
+  controller_type: 'esp32_rf',
+  controller_url: 'http://192.168.2.60/',
+  online: true,
+  firmware_version: 'rf-0.1.0',
+  arm_state: 'unknown',
+  controller_health: { transport: 'rf433', wifi_rssi: -79, clock_synced: false, dry_run: true, rf_tx_count: 0 },
+  last_event: { ...mockEventGranted, command: 'open', command_sent: true, command_result: 'dry_run' },
+};
+
+/** The same gate live: commands go out over the air and cannot be confirmed. */
+export const mockGateStatusRadioLive: GateStatus = {
+  ...mockGateStatusRadioDryRun,
+  controller_health: { transport: 'rf433', wifi_rssi: -61, clock_synced: true, dry_run: false, rf_tx_count: 42 },
+  last_event: { ...mockEventGranted, command: 'open', command_sent: true, command_result: 'sent' },
+};
+
 export const mockCameraPresets: CameraPresets = {
   hikvision: {
     main_stream_path: '/Streaming/Channels/101',

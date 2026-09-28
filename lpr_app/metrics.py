@@ -186,6 +186,26 @@ GATE_ARM_UP = Gauge(
     registry=REGISTRY
 )
 
+GATE_CONTROLLER_RSSI = Gauge(
+    'lpr_gate_controller_rssi_dbm',
+    'WiFi signal the gate controller last reported (dBm)',
+    ['gate'],
+    registry=REGISTRY
+)
+
+GATE_LIVE_MODE = Gauge(
+    'lpr_gate_live_mode',
+    'Whether GATE_MODE is live (1: real controllers move) or shadow (0)',
+    registry=REGISTRY
+)
+
+GATE_CONTROLLER_DRY_RUN = Gauge(
+    'lpr_gate_controller_dry_run',
+    'Whether the gate controller reports dry run (1: validates commands but moves nothing)',
+    ['gate'],
+    registry=REGISTRY
+)
+
 # Agent status reports older than this are treated as not streaming
 GATE_CAMERA_STATUS_MAX_AGE_SECONDS = 120
 
@@ -219,13 +239,20 @@ def update_gate_metrics(now=None):
         from .models import Camera, GateDevice
 
         now = now or timezone.now()
+        from django.conf import settings
         from .services import barrier_simulator
+
+        GATE_LIVE_MODE.set(1 if settings.GATE_MODE == 'live' else 0)
 
         for gate in GateDevice.objects.all():
             if gate.is_simulated:
                 barrier_simulator.refresh(gate, now)
             GATE_CONTROLLER_UP.labels(gate=gate.name).set(1 if gate.is_online(now) else 0)
             GATE_ARM_UP.labels(gate=gate.name).set(1 if gate.arm_state == 'up' else 0)
+            health = gate.controller_health or {}
+            if 'wifi_rssi' in health:
+                GATE_CONTROLLER_RSSI.labels(gate=gate.name).set(health['wifi_rssi'])
+            GATE_CONTROLLER_DRY_RUN.labels(gate=gate.name).set(1 if health.get('dry_run') else 0)
         for camera in Camera.objects.filter(is_enabled=True):
             fresh = camera.agent_status_at and (now - camera.agent_status_at).total_seconds() <= GATE_CAMERA_STATUS_MAX_AGE_SECONDS
             GATE_CAMERA_STREAMING.labels(camera=camera.name).set(

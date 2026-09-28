@@ -113,6 +113,8 @@ def serialize_gate(g):
         'last_command_result': g.last_command_result,
         'arm_state': g.arm_state or None,
         'arm_state_at': iso(g.arm_state_at),
+        # Self-reported by the controller's heartbeat: transport, wifi_rssi, clock_synced, dry_run...
+        'controller_health': g.controller_health or None,
     }
 
 

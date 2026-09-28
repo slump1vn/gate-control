@@ -310,6 +310,19 @@ export interface TriggerReadout {
   at?: string;
 }
 
+/** How the gate's barrier is driven: ESP32 relays on the terminals, ESP32 + 433 MHz remote, or the simulator. */
+export type ControllerType = 'esp32' | 'esp32_rf' | 'simulator';
+
+/** What a controller last reported about itself in its heartbeat; every field is optional. */
+export interface ControllerHealth {
+  transport?: 'relay' | 'rf433';
+  wifi_rssi?: number;
+  clock_synced?: boolean;
+  dry_run?: boolean;
+  rf_tx_count?: number;
+  uptime_s?: number;
+}
+
 export interface GateCamera {
   id: number;
   name: string;
@@ -331,7 +344,7 @@ export interface GateDevice {
   /** Why the cameras are not enough yet; empty when they are. */
   camera_warning: string;
   exit_policy: 'registered' | 'any';
-  controller_type: 'esp32' | 'simulator';
+  controller_type: ControllerType;
   controller_url: string;
   controller_token_set: boolean;
   has_safety_input: boolean;
@@ -342,6 +355,7 @@ export interface GateDevice {
   last_command_result: string;
   arm_state: ArmState | null;
   arm_state_at: string | null;
+  controller_health?: ControllerHealth | null;
 }
 
 export interface GateStatus extends GateDevice {
@@ -498,7 +512,7 @@ export interface GateDeviceInput {
   location: string;
   cameras: { camera: number; direction: Direction }[];
   exit_policy: 'registered' | 'any';
-  controller_type: 'esp32' | 'simulator';
+  controller_type: ControllerType;
   controller_url: string;
   controller_token?: string;
   has_safety_input: boolean;

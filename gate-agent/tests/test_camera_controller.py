@@ -13,6 +13,7 @@ from gate_agent.camera import (
     CameraAuthError, CameraError, DirectorySource, EndOfSource, RtspSource, SnapshotSource,
     build_source, crop_roi, encode_jpeg, redact, rtsp_url,
 )
+from gate_agent import signing
 from gate_agent.controller import ControllerClient, ControllerError
 
 
@@ -242,15 +243,21 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(body['arm_state'], 'moving')
         args, kwargs = self.session.post.call_args
         self.assertEqual(args[0], 'http://lpr-app:8000/api/v1/gate/sim/1/open')
-        self.assertEqual(kwargs['headers']['Authorization'], 'Bearer tok')
-        self.assertEqual(kwargs['json']['ts'], self.wall[0])
-        self.assertEqual(kwargs['json']['nonce'], int(self.wall[0] * 1000))
+        headers = kwargs['headers']
+        # Contract v2: signed, and the token itself is never sent
+        self.assertNotIn('Authorization', headers)
+        self.assertNotIn('tok', ''.join(headers.values()) + kwargs['data'].decode())
+        self.assertEqual(headers['X-Gate-Ts'], str(int(self.wall[0])))
+        self.assertEqual(headers['X-Gate-Nonce'], str(int(self.wall[0] * 1000)))
+        expected = signing.sign('tok', 'POST', '/api/v1/gate/sim/1/open', headers['X-Gate-Nonce'],
+                                headers['X-Gate-Ts'], kwargs['data'])
+        self.assertEqual(headers['X-Gate-Sig'], expected)
 
     def test_nonce_strictly_increases_even_with_same_clock(self):
         self.session.post.return_value = FakeResponse(200, body={'ok': True})
         self.client.send('stop')
         self.client.send('stop')
-        nonces = [c.kwargs['json']['nonce'] for c in self.session.post.call_args_list]
+        nonces = [int(c.kwargs['headers']['X-Gate-Nonce']) for c in self.session.post.call_args_list]
         self.assertEqual(nonces[1], nonces[0] + 1)
 
     def test_local_rate_limit_but_stop_always_allowed(self):
@@ -292,6 +299,9 @@ class ControllerTest(unittest.TestCase):
     def test_status(self):
         self.session.get.return_value = FakeResponse(200, body={'arm_state': 'down'})
         self.assertEqual(self.client.status()['arm_state'], 'down')
+        headers = self.session.get.call_args.kwargs['headers']
+        self.assertEqual(headers['X-Gate-Sig'], signing.sign(
+            'tok', 'GET', '/api/v1/gate/sim/1/status', headers['X-Gate-Nonce'], headers['X-Gate-Ts'], b''))
         self.session.get.return_value = FakeResponse(401, body={})
         with self.assertRaises(ControllerError):
             self.client.status()
@@ -335,3 +345,20 @@ class RtspOptionsTest(unittest.TestCase):
             with self.assertRaises(CameraError):
                 RtspSource('rtsp://x/', transport='udp').grab()
         self.assertIn('rtsp_transport;udp', os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'])
+
+
+class SigningTest(unittest.TestCase):
+    def test_shared_test_vector(self):
+        # The same vector is checked by lpr_app/utils/gate_signing.py and the firmware
+        v = signing.TEST_VECTOR
+        self.assertEqual(signing.sign(v['secret'], v['method'], v['path'], v['nonce'], v['ts'], v['body']),
+                         v['signature'])
+
+    def test_every_part_is_signed(self):
+        v = dict(signing.TEST_VECTOR)
+        base = signing.sign(v['secret'], v['method'], v['path'], v['nonce'], v['ts'], v['body'])
+        for key, other in (('secret', 'x'), ('method', 'GET'), ('path', '/close'), ('nonce', '1'),
+                           ('ts', '2'), ('body', b'{"a":1}')):
+            changed = dict(v, **{key: other})
+            self.assertNotEqual(signing.sign(changed['secret'], changed['method'], changed['path'],
+                                             changed['nonce'], changed['ts'], changed['body']), base, key)

@@ -42,7 +42,17 @@ export function CommandBadge({ event }: { event: Pick<AccessEvent, 'command' | '
   const result = event.command_result;
   let color: BadgeColor;
   let label: string;
-  if (event.command_sent) {
+  if (event.command_sent && result === 'sent') {
+    // A radio controller cannot tell whether the barrier heard it
+    color = 'blue';
+    label = t('command.sentUnconfirmed');
+  } else if (event.command_sent && result === 'not_confirmed') {
+    color = 'yellow';
+    label = t('command.notConfirmed');
+  } else if (event.command_sent && result === 'dry_run') {
+    color = 'gray';
+    label = t('command.dryRun');
+  } else if (event.command_sent) {
     color = 'green';
     label = result ? t('command.sentWith', { result }) : t('command.sent');
   } else if (!result || result === 'dispatched') {

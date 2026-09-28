@@ -11,6 +11,9 @@ import type { Dictionary } from '@/lib/i18n/dictionaries';
 import { formatRelativeTime } from '@/lib/relative-time';
 import { Badge, cardClass, dangerButton, secondaryButton } from './ui';
 
+// Below this the controller's commands start arriving late or not at all
+const WEAK_WIFI_DBM = -75;
+
 interface GateStatusCardProps {
   gate: GateStatus;
   mode: 'shadow' | 'live';
@@ -26,6 +29,9 @@ export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCard
   const commandsLogged = mode === 'shadow' && !simulated;
   const last = gate.last_event;
   const armState = gate.simulator?.arm_state ?? gate.arm_state;
+  const health = gate.controller_health ?? {};
+  const radio = gate.controller_type === 'esp32_rf' || health.transport === 'rf433';
+  const weakWifi = health.wifi_rssi !== undefined && health.wifi_rssi < WEAK_WIFI_DBM;
 
   const send = async (command: Command) => {
     setBusy(command);
@@ -45,6 +51,8 @@ export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCard
         </div>
         <div className="flex flex-wrap gap-1 justify-end">
           {simulated && <Badge color="purple">{t('gate.simulated')}</Badge>}
+          {radio && <Badge color="blue">{t('gate.radio')}</Badge>}
+          {health.dry_run && <Badge color="yellow">{t('gate.dryRun')}</Badge>}
           {!gate.is_enabled && <Badge color="gray">{t('gate.disabled')}</Badge>}
           <Badge color={gate.online ? 'green' : 'red'}>
             {t(gate.online ? 'gate.controllerOnline' : 'gate.controllerOffline')}
@@ -77,6 +85,14 @@ export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCard
             <div className="flex justify-between gap-2">
               <dt className="text-gray-500 dark:text-gray-400">{t('gate.lastHeartbeat')}</dt>
               <dd>{gate.last_seen ? formatRelativeTime(gate.last_seen) : t('common.never')}</dd>
+            </div>
+          )}
+          {!simulated && health.wifi_rssi !== undefined && (
+            <div className="flex justify-between gap-2">
+              <dt className="text-gray-500 dark:text-gray-400">{t('gate.wifi')}</dt>
+              <dd className={weakWifi ? 'text-yellow-700 dark:text-yellow-400' : ''}>
+                {health.wifi_rssi} dBm{weakWifi && ` · ${t('gate.wifiWeak')}`}
+              </dd>
             </div>
           )}
         </dl>
@@ -121,6 +137,12 @@ export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCard
       )}
       {commandsLogged && (
         <p className="text-xs text-yellow-700 dark:text-yellow-400">{t('gate.shadowNote')}</p>
+      )}
+      {!simulated && health.dry_run && (
+        <p className="text-xs text-yellow-700 dark:text-yellow-400">{t('gate.dryRunNote')}</p>
+      )}
+      {!simulated && health.clock_synced === false && (
+        <p className="text-xs text-red-600 dark:text-red-400">{t('gate.clockNotSynced')}</p>
       )}
     </section>
   );

@@ -433,6 +433,7 @@ class GateDevice(models.Model):
     RECOMMENDED_CAMERAS = 2
     CONTROLLER_TYPES = [
         ('esp32', 'ESP32 relay controller'),
+        ('esp32_rf', 'ESP32 + 433 MHz remote'),
         ('simulator', 'Simulated barrier (no hardware)'),
     ]
     ARM_STATES = [
@@ -469,6 +470,11 @@ class GateDevice(models.Model):
     last_command_result = models.CharField(max_length=100, blank=True, editable=False)
     arm_state = models.CharField(max_length=10, choices=ARM_STATES, blank=True, editable=False)
     arm_state_at = models.DateTimeField(null=True, blank=True, editable=False)
+    controller_health = models.JSONField(
+        default=dict, blank=True, editable=False,
+        help_text="What the controller last reported about itself: transport (relay or rf433), "
+                  "WiFi signal (dBm), whether its clock is synced, radio transmissions, dry run.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
