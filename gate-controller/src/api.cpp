@@ -7,6 +7,7 @@
 #include "device.h"
 #include "net.h"
 #include "radio.h"
+#include "remote.h"
 
 using gatecore::Command;
 
@@ -42,6 +43,49 @@ void add_state(JsonDocument& doc) {
   doc["last_command_result"] = device::last_result();
 }
 
+bool parse_button(const String& name, Button* out) {
+  for (int b = 0; b < BUTTON_COUNT; ++b) {
+    if (name == button_name(Button(b))) {
+      *out = Button(b);
+      return true;
+    }
+  }
+  return false;
+}
+
+// POST /capture {"button": "up", "seconds": 6, "job": 12}: listen, answer at once
+void handle_capture(const gatecore::Request& req) {
+  JsonDocument body;
+  Button button;
+  if (deserializeJson(body, req.body) || !parse_button(body["button"] | "", &button)) {
+    return refuse(400, "bad_request");
+  }
+  if (!remote::start(button, body["seconds"] | 6, body["job"] | 0)) return refuse(409, "busy");
+  JsonDocument doc;
+  doc["ok"] = true;
+  doc["command"] = "capture";
+  doc["result"] = "capturing";
+  reply(202, doc);
+}
+
+// POST /capture/save {"button": "up"}: keep the last capture as that button's code
+void handle_save(const gatecore::Request& req) {
+  JsonDocument body;
+  Button button;
+  if (deserializeJson(body, req.body) || !parse_button(body["button"] | "", &button)) {
+    return refuse(400, "bad_request");
+  }
+  const char* error = "";
+  if (!remote::save(button, &error)) return refuse(409, error);
+  device::set_last_result(String("save_code: ") + button_name(button));
+  JsonDocument doc;
+  doc["ok"] = true;
+  doc["command"] = "save_code";
+  doc["result"] = "saved";
+  remote::describe(doc);
+  reply(200, doc);
+}
+
 Button button_for(Command cmd) {
   switch (cmd) {
     case Command::Open: return BUTTON_UP;
@@ -73,8 +117,11 @@ void handle() {
   if (is_status) {
     doc["ok"] = true;
     add_state(doc);
+    remote::describe(doc);
     return reply(200, doc);
   }
+  if (cmd == Command::Capture) return handle_capture(req);
+  if (cmd == Command::SaveCode) return handle_save(req);
 
   Button button = button_for(cmd);
   if (!device::cfg.buttons[button].set) {

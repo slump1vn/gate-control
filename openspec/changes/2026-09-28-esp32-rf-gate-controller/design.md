@@ -163,6 +163,19 @@ A fixed-code 433 MHz frame can be recorded by anyone within range with a €15 S
 
 433.05-434.79 MHz is an ISM/short-range band in Vietnam. Low-power devices in it are typically exempt from individual licensing, subject to power and duty-cycle limits set by the Ministry's short-range device circular. Task 0.5 confirms the current circular and its limits before the device is deployed. The firmware already caps power (+10 dBm) and duty cycle (bursts under 1.5 s, at most one motion command every 3 s).
 
+### 12. Capturing a remote from the admin UI
+
+Setup mode needs someone next to the device with a phone on its access point. Once the device is on the network, the same capture can be driven from `/manage/gates`. Django still never contacts the device (design §1 of the base change):
+
+1. The admin asks for a capture of one button. A `ControllerJob` is queued, one active job per gate.
+2. The agent claims it (`/api/v1/gate/agent-jobs/`) and sends the device a signed `POST /capture {button, seconds, job}`. The device answers `202` at once and listens in the background, so it keeps serving commands. A command that transmits cancels the capture.
+3. When the window ends, the device decodes what it heard (a code must be seen at least twice) and sends a heartbeat straight away. Its `capture` object (state, job, fingerprint, bits, pulse width, frames heard) finishes the job.
+4. The admin keeps it: a `save_code` job, `POST /capture/save {button}`. The device stores its own candidate; nothing about the code travels.
+
+**Only fingerprints leave the device**: the first 8 hex digits of SHA-256 of `"<bits>:<CODE HEX>"`. A code is a key to the gate. Showing even part of one would be too much, since 4 of 6 hex digits leave 256 guesses. A fingerprint is enough to see whether a capture matches what is stored. The gate's change history records each saved code as old and new fingerprints.
+
+Capturing and saving move nothing, so both work in shadow mode and with dry run on. The simulator implements both, hearing a made-up remote at once, so the flow can be exercised end to end before the hardware exists.
+
 ## Risks / Trade-offs
 
 - **Rolling-code or single-button remotes** make RF emulation impossible → relay design. Settled in survey task 0.2, before any purchase beyond a €20 test kit.

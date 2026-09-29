@@ -38,6 +38,14 @@
 
 - [x] 4.1 `.github/workflows/gate-controller-build.yml`: `pio test -e native` and `pio run -e esp32s3` on changes under `gate-controller/`; upload the firmware `.bin` as an artifact (with a timeout, like the other workflows).
 
+## 4A. Capture from the admin UI
+
+- [x] 4A.1 Firmware: non-blocking capture (`POST /capture`, 202) with the result in an early heartbeat; `POST /capture/save`; a transmission cancels a capture; codes reported as fingerprints only.
+- [x] 4A.2 Django: `ControllerJob` (one active per gate, claim TTL, result deadline), admin endpoint, agent claim and result endpoints, heartbeat `capture` / `buttons` fields (type-checked), audit of saved codes, simulated capture.
+- [x] 4A.3 Agent: poll jobs, signed `capture` / `save_code` calls, report results.
+- [x] 4A.4 SPA: *Remote codes* on `/manage/gates` with a countdown while listening, Save once heard; stories.
+- [ ] 4A.5 Bench: capture each button of a real remote from the admin UI, save it, and check with the spare receiver that the saved code works.
+
 ## 5. Bench
 
 - [ ] 5.1 Dry-run: the agent in `live` mode pointed at the device on the bench. Every command path returns `dry_run`; every rejection (bad signature, old ts, replayed nonce, interlock, rate limit, clock not synced) is exercised over HTTP.

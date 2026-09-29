@@ -23,6 +23,8 @@ int64_t now_s();
 
 // Heartbeat every 10 s from its own task; `fill` adds the device's fields
 void start_heartbeat(const Config& cfg, std::function<void(JsonDocument&)> fill);
+// Send the next heartbeat now rather than at its turn (a capture result is waiting)
+void heartbeat_soon();
 
 // The path part of a URL ("http://host:8000/api/x/" -> "/api/x/")
 String url_path(const String& url);

@@ -30,8 +30,12 @@ urlpatterns = [
     path('api/v1/gate/agent-config/', gate_views.api_gate_agent_config, name='api_gate_agent_config'),
     path('api/v1/gate/agent-status/', gate_views.api_gate_agent_status, name='api_gate_agent_status'),
     path('api/v1/gate/agent-commands/', gate_views.api_gate_agent_commands, name='api_gate_agent_commands'),
+    path('api/v1/gate/agent-jobs/', gate_views.api_gate_agent_jobs, name='api_gate_agent_jobs'),
+    path('api/v1/gate/controller-jobs/<int:job_id>/result/', gate_views.api_controller_job_result, name='api_controller_job_result'),
     path('api/v1/gate/events/<int:event_id>/command-result/', gate_views.api_gate_command_result, name='api_gate_command_result'),
     path('api/v1/gate/heartbeat/', gate_views.api_gate_heartbeat, name='api_gate_heartbeat'),
+    path('api/v1/gate/sim/<int:gate_id>/capture/save', gate_views.api_gate_simulator_device,
+         {'command': 'capture/save'}, name='api_gate_simulator_capture_save'),
     path('api/v1/gate/sim/<int:gate_id>/<str:command>', gate_views.api_gate_simulator_device, name='api_gate_simulator_device'),
 
     # Gate operators
@@ -53,6 +57,7 @@ urlpatterns = [
     path('api/v1/gate/cameras/<int:camera_id>/', gate_admin_views.api_camera_detail, name='api_camera_detail'),
     path('api/v1/gate/devices/', gate_admin_views.api_gate_devices, name='api_gate_devices'),
     path('api/v1/gate/devices/<int:gate_id>/', gate_admin_views.api_gate_device_detail, name='api_gate_device_detail'),
+    path('api/v1/gate/devices/<int:gate_id>/controller-jobs/', gate_admin_views.api_gate_controller_jobs, name='api_gate_controller_jobs'),
     path('api/v1/gate/devices/<int:gate_id>/test-decide/', gate_admin_views.api_gate_test_decide, name='api_gate_test_decide'),
     path('api/v1/gate/devices/<int:gate_id>/simulator/', gate_admin_views.api_gate_simulator, name='api_gate_simulator'),
     path('api/v1/gate/config-changes/', gate_admin_views.api_config_changes, name='api_config_changes'),

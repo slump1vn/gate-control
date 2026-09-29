@@ -63,4 +63,10 @@ Decoded decode_confirmed(const std::vector<uint32_t>& durations, int min_count =
 
 std::string code_hex(uint32_t code, uint8_t bits);
 
+// What leaves the device instead of a code: the first 8 hex digits of
+// SHA-256("<bits>:<code hex>"). Enough to tell two codes apart, useless for
+// building a transmitter. A code is a key to the gate; even part of one is
+// too much (4 of 6 hex digits leave 256 guesses).
+std::string code_fingerprint(uint32_t code, uint8_t bits);
+
 }  // namespace gatecore

@@ -58,6 +58,20 @@ class LprApi:
         response = self.session.get(self._url('/api/v1/gate/agent-commands/'), timeout=self.timeout)
         return self._check(response).json().get('commands', [])
 
+    def agent_jobs(self):
+        """Installer jobs (remote capture) to carry out on controllers."""
+        response = self.session.get(self._url('/api/v1/gate/agent-jobs/'), timeout=self.timeout)
+        return self._check(response).json().get('jobs', [])
+
+    def job_result(self, job_id, sent, result, detail=None):
+        body = {'sent': bool(sent), 'result': str(result)[:100]}
+        if detail:
+            body['detail'] = detail
+        response = self.session.post(
+            self._url(f'/api/v1/gate/controller-jobs/{job_id}/result/'), json=body, timeout=self.timeout,
+        )
+        self._check(response)
+
     def agent_status(self, cameras):
         response = self.session.post(
             self._url('/api/v1/gate/agent-status/'), json={'cameras': cameras}, timeout=self.timeout,

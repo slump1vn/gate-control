@@ -89,9 +89,23 @@ console: **write it on the device label**. Join it and open `http://192.168.4.1/
 5. **Save and restart.** Setup mode also ends by itself after 10 minutes
    without use. It never serves the command API.
 
+## Capturing a remote from the admin UI
+
+Buttons can also be captured without setup mode, once the device is on the
+network: `/manage/gates` → *Remote codes*. Press **Capture** for a button,
+then hold that button of the guard's remote near the device for the 6
+seconds shown. When the code has been heard (twice, as in setup mode),
+press **Save**. The device keeps serving commands while it listens: an
+open, close or stop in the meantime cancels the capture. The code never
+leaves the device. The page shows fingerprints only, and the gate's change
+history records which fingerprint replaced which.
+
 ## Normal mode
 
 - LED: green = ready; amber = dry run or clock not synced yet; red = no WiFi.
+- `POST /capture {button, seconds, job}` (answers 202, result in the next
+  heartbeat) and `POST /capture/save {button}`, from the admin UI through
+  the agent.
 - `POST /open`, `/close`, `/stop` and `GET /status`, controller contract v2:
   signed with `X-Gate-Nonce`, `X-Gate-Ts` and `X-Gate-Sig`. The token itself is
   never sent. The gate agent does this. There is nothing to call by hand.

@@ -12,6 +12,8 @@ including the controller's auto-close timer (auto_close_seconds, like the
 BR6_CT's TIMING DIP).
 """
 
+import hashlib
+import secrets
 import time
 from datetime import timedelta
 
@@ -201,6 +203,81 @@ def execute(gate, command, nonce, ts, now=None):
     body = state(sim, now)
     body.update({'ok': True, 'command': command, 'result': result})
     return body
+
+
+# ---------------------------------------------------------------- remote capture
+#
+# The 433 MHz controller's capture, simulated: listening "hears" a made-up
+# remote at once, so the admin UI's capture flow can be tried end to end
+# before the hardware exists. Like the firmware, only fingerprints leave it.
+
+CAPTURE_BUTTONS = ('up', 'down', 'stop')
+
+
+def code_fingerprint(code, bits):
+    """First 8 hex of SHA-256("<bits>:<code as upper hex>"), as the firmware computes it."""
+    digits = (bits + 3) // 4
+    return hashlib.sha256(f'{bits}:{code:0{digits}X}'.encode()).hexdigest()[:8]
+
+
+def accept_request(gate, nonce, ts, now=None):
+    """The nonce and timestamp rules of a command, for requests that move nothing."""
+    now = now or timezone.now()
+    try:
+        nonce = int(nonce)
+        ts = float(ts)
+    except (TypeError, ValueError):
+        raise CommandRejected(400, 'nonce and ts are required')
+    with transaction.atomic():
+        sim = SimulatedBarrier.objects.select_for_update().get(pk=get_simulator(gate).pk)
+        if nonce <= sim.last_nonce:
+            raise CommandRejected(409, 'Replayed nonce')
+        if abs(now.timestamp() - ts) > TIMESTAMP_WINDOW_SECONDS:
+            raise CommandRejected(401, 'Timestamp outside the allowed window')
+        sim.last_nonce = nonce
+        sim.save(update_fields=['last_nonce'])
+
+
+def _health(gate):
+    gate.refresh_from_db(fields=['controller_health'])
+    health = dict(gate.controller_health or {})
+    health.setdefault('buttons', {b: {'set': False} for b in CAPTURE_BUTTONS})
+    return health
+
+
+def capture(gate, button, job=None):
+    """Listen for a remote button: the simulator hears one straight away."""
+    if button not in CAPTURE_BUTTONS:
+        raise CommandRejected(400, 'bad_request')
+    code = secrets.randbits(24)
+    report = {
+        'state': 'captured', 'button': button, 'age_s': 0, 'edges': 250, 'frames': 5,
+        'fingerprint': code_fingerprint(code, 24), 'bits': 24, 'pulse_us': 350,
+    }
+    if isinstance(job, int) and not isinstance(job, bool) and job > 0:
+        report['job'] = job
+    health = _health(gate)
+    health['capture'] = report
+    GateDevice.objects.filter(pk=gate.pk).update(controller_health=health)
+    gate.controller_health = health
+    return report
+
+
+def save_code(gate, button):
+    """Keep the last capture as `button`'s code. Returns the buttons as reported."""
+    health = _health(gate)
+    report = health.get('capture') or {}
+    if report.get('state') != 'captured':
+        raise CommandRejected(409, 'no_capture')
+    if report.get('button') != button:
+        raise CommandRejected(409, 'captured_for_another_button')
+    health['buttons'][button] = {
+        'set': True, 'fingerprint': report['fingerprint'], 'bits': report['bits'], 'pulse_us': report['pulse_us'],
+    }
+    health['capture'] = dict(report, state='saved')
+    GateDevice.objects.filter(pk=gate.pk).update(controller_health=health)
+    gate.controller_health = health
+    return health['buttons']
 
 
 def execute_now(gate, command):

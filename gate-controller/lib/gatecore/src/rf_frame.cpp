@@ -2,6 +2,8 @@
 
 #include <cstdio>
 
+#include "crypto.h"
+
 namespace gatecore {
 
 namespace {
@@ -143,6 +145,10 @@ std::string code_hex(uint32_t code, uint8_t bits) {
   int digits = (bits + 3) / 4;
   std::snprintf(buf, sizeof(buf), "%0*X", digits, code);
   return buf;
+}
+
+std::string code_fingerprint(uint32_t code, uint8_t bits) {
+  return sha256_hex(std::to_string(bits) + ":" + code_hex(code, bits)).substr(0, 8);
 }
 
 }  // namespace gatecore

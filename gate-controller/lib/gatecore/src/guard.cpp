@@ -9,6 +9,8 @@ Command parse_command(const std::string& path) {
   if (path == "/close") return Command::Close;
   if (path == "/stop") return Command::Stop;
   if (path == "/status") return Command::Status;
+  if (path == "/capture") return Command::Capture;
+  if (path == "/capture/save") return Command::SaveCode;
   return Command::Unknown;
 }
 
@@ -18,6 +20,8 @@ const char* command_name(Command c) {
     case Command::Close: return "close";
     case Command::Stop: return "stop";
     case Command::Status: return "status";
+    case Command::Capture: return "capture";
+    case Command::SaveCode: return "save_code";
     default: return "unknown";
   }
 }
@@ -81,7 +85,9 @@ Verdict Guard::authenticate(const std::string& secret, const Request& req, bool 
 }
 
 Verdict Guard::admit(Command cmd, uint32_t now_ms) {
-  if (cmd == Command::Stop || cmd == Command::Status) return {200, ""};
+  if (cmd == Command::Stop || cmd == Command::Status || cmd == Command::Capture || cmd == Command::SaveCode) {
+    return {200, ""};
+  }
   if (cmd != Command::Open && cmd != Command::Close) return {404, "unknown_command"};
   if (any_motion_) {
     uint32_t since = now_ms - last_motion_ms_;  // wraps correctly across millis() overflow

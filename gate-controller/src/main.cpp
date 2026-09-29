@@ -18,6 +18,7 @@
 #include "pins.h"
 #include "portal.h"
 #include "radio.h"
+#include "remote.h"
 
 namespace device {
 
@@ -121,6 +122,7 @@ void setup() {
     doc["arm_state"] = arm::state();
     String last = device::last_result();
     if (last.length()) doc["last_command_result"] = last;
+    remote::describe(doc);
   });
 }
 
@@ -132,6 +134,7 @@ void loop() {
     portal::tick();
   } else {
     net::tick();
+    remote::poll();
     const char* confirmed = arm::poll();
     if (confirmed) device::set_last_result(confirmed);
   }

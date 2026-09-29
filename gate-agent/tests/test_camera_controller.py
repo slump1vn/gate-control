@@ -1,3 +1,4 @@
+import json
 import io
 import time
 import os
@@ -345,6 +346,49 @@ class RtspOptionsTest(unittest.TestCase):
             with self.assertRaises(CameraError):
                 RtspSource('rtsp://x/', transport='udp').grab()
         self.assertIn('rtsp_transport;udp', os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'])
+
+
+class ControllerCaptureTest(unittest.TestCase):
+    def setUp(self):
+        self.session = mock.Mock()
+        self.client = ControllerClient('http://192.168.2.60/', 'tok', session=self.session,
+                                       wall_clock=lambda: 1_700_000_000.0)
+
+    def test_capture_and_save_are_signed_json_posts(self):
+        self.session.post.return_value = FakeResponse(202, body={'ok': True, 'result': 'capturing'})
+        self.assertEqual(self.client.capture('up', 6, 12)['result'], 'capturing')
+        args, kwargs = self.session.post.call_args
+        self.assertEqual(args[0], 'http://192.168.2.60/capture')
+        self.assertEqual(json.loads(kwargs['data']), {'button': 'up', 'seconds': 6, 'job': 12})
+        headers = kwargs['headers']
+        self.assertEqual(headers['X-Gate-Sig'], signing.sign(
+            'tok', 'POST', '/capture', headers['X-Gate-Nonce'], headers['X-Gate-Ts'], kwargs['data']))
+
+        self.session.post.return_value = FakeResponse(200, body={'ok': True, 'result': 'saved'})
+        self.client.save_code('stop')
+        args, kwargs = self.session.post.call_args
+        self.assertEqual(args[0], 'http://192.168.2.60/capture/save')
+        self.assertEqual(kwargs['headers']['X-Gate-Sig'], signing.sign(
+            'tok', 'POST', '/capture/save', kwargs['headers']['X-Gate-Nonce'], kwargs['headers']['X-Gate-Ts'],
+            kwargs['data']))
+
+    def test_capture_is_not_rate_limited_like_motion(self):
+        self.session.post.return_value = FakeResponse(200, body={'ok': True})
+        self.client.send('open')
+        self.client.capture('up', 6, 1)
+        self.client.save_code('up')
+        self.assertEqual(self.session.post.call_count, 3)
+
+    def test_refused_and_unreachable(self):
+        self.session.post.return_value = FakeResponse(409, body={'error': 'no_capture'})
+        with self.assertRaises(ControllerError) as ctx:
+            self.client.save_code('up')
+        self.assertEqual(ctx.exception.status, 409)
+        self.assertIn('no_capture', ctx.exception.message)
+        self.session.post.side_effect = requests.ConnectionError()
+        with self.assertRaises(ControllerError) as ctx:
+            self.client.capture('up', 6, 1)
+        self.assertIn('unreachable', ctx.exception.message)
 
 
 class SigningTest(unittest.TestCase):

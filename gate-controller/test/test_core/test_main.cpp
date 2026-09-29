@@ -134,7 +134,28 @@ static void test_rate_limit_survives_millis_wraparound() {
   TEST_ASSERT_EQUAL(200, g.admit(Command::Open, 0x00000C00u).status);  // 0x1400 = 5120 ms later
 }
 
+static void test_capture_commands_are_never_rate_limited() {
+  Guard g;
+  TEST_ASSERT_EQUAL(200, g.admit(Command::Open, 1000).status);
+  TEST_ASSERT_EQUAL(200, g.admit(Command::Capture, 1001).status);
+  TEST_ASSERT_EQUAL(200, g.admit(Command::SaveCode, 1002).status);
+  // ...and do not count as motion either
+  TEST_ASSERT_EQUAL(429, g.admit(Command::Open, 2000).status);
+}
+
+static void test_code_fingerprint() {
+  TEST_ASSERT_EQUAL(8, code_fingerprint(0x12345A, 24).size());
+  // Same value as lpr_app/services/barrier_simulator.code_fingerprint
+  TEST_ASSERT_EQUAL_STRING("525403a6", code_fingerprint(0x12345A, 24).c_str());
+  TEST_ASSERT_TRUE(code_fingerprint(0x12345A, 24) != code_fingerprint(0x12345B, 24));
+  TEST_ASSERT_TRUE(code_fingerprint(0x12345A, 24) != code_fingerprint(0x12345A, 28));
+  // Nothing of the code itself shows through
+  TEST_ASSERT_TRUE(code_fingerprint(0x12345A, 24).find("345a") == std::string::npos);
+}
+
 static void test_parse_command() {
+  TEST_ASSERT_TRUE(parse_command("/capture") == Command::Capture);
+  TEST_ASSERT_TRUE(parse_command("/capture/save") == Command::SaveCode);
   TEST_ASSERT_TRUE(parse_command("/open") == Command::Open);
   TEST_ASSERT_TRUE(parse_command("/close") == Command::Close);
   TEST_ASSERT_TRUE(parse_command("/stop") == Command::Stop);
@@ -257,6 +278,8 @@ int main(int, char**) {
   RUN_TEST(test_interlock_rate_limit_and_stop_exempt);
   RUN_TEST(test_rate_limit_survives_millis_wraparound);
   RUN_TEST(test_parse_command);
+  RUN_TEST(test_capture_commands_are_never_rate_limited);
+  RUN_TEST(test_code_fingerprint);
   RUN_TEST(test_protocol1_frame_matches_rcswitch);
   RUN_TEST(test_burst_repeats_frames_back_to_back);
   RUN_TEST(test_ev1527_code_layout);

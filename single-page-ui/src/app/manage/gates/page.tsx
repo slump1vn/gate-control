@@ -9,6 +9,7 @@ import type { Dictionary } from '@/lib/i18n/dictionaries';
 import type { GateDevice, GateDeviceInput } from '@/lib/gate-api';
 import RequireRole from '@/components/RequireRole';
 import GateDeviceForm from '@/components/GateDeviceForm';
+import RemoteCodesPanel from '@/components/RemoteCodesPanel';
 import { useI18n } from '@/components/I18nContext';
 import Spinner from '@/components/Spinner';
 import { Alert, Badge, Modal, PageHeader, formatDateTime, primaryButton } from '@/components/ui';
@@ -19,6 +20,8 @@ function GatesContent() {
   const [cameras, setCameras] = useState<{ id: number; name: string }[]>([]);
   const [apiBase, setApiBase] = useState('');
   const [editing, setEditing] = useState<GateDevice | 'new' | null>(null);
+  // The gate whose remote codes are being captured
+  const [remoteFor, setRemoteFor] = useState<GateDevice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -132,6 +135,11 @@ function GatesContent() {
                       className="text-purple-600 dark:text-purple-400 hover:underline" title={t('gates.testRecognitionHint')}>
                       {t('gates.testRecognition')}
                     </a>
+                    {(g.controller_type === 'esp32_rf' || g.controller_type === 'simulator') && (
+                      <button onClick={() => setRemoteFor(g)} className="text-purple-600 dark:text-purple-400 hover:underline">
+                        {t('gates.remoteCodes')}
+                      </button>
+                    )}
                     <button onClick={() => setEditing(g)} className="text-purple-600 dark:text-purple-400 hover:underline">{t('common.edit')}</button>
                     <button onClick={() => remove(g)} className="text-red-600 dark:text-red-400 hover:underline">{t('common.delete')}</button>
                   </td>
@@ -148,6 +156,12 @@ function GatesContent() {
           onClose={() => setEditing(null)}
         >
           <GateDeviceForm gate={editing === 'new' ? null : editing} cameras={cameras} onSubmit={save} onCancel={() => setEditing(null)} />
+        </Modal>
+      )}
+
+      {remoteFor && (
+        <Modal title={t('gates.remoteCodesTitle', { name: remoteFor.name })} onClose={() => setRemoteFor(null)}>
+          <RemoteCodesPanel gateId={remoteFor.id} simulated={remoteFor.controller_type === 'simulator'} />
         </Modal>
       )}
     </div>

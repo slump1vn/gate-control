@@ -535,6 +535,60 @@ export function deleteGateDevice(id: number) {
   return request<{ success: boolean }>(`/api/v1/gate/devices/${id}/`, { method: 'DELETE' });
 }
 
+// ---------------------------------------------------------------- remote capture (admin)
+
+export type RemoteButton = 'up' | 'down' | 'stop';
+export const REMOTE_BUTTONS: RemoteButton[] = ['up', 'down', 'stop'];
+
+/** A code as the controller reports it: never the code, only its fingerprint. */
+export interface RemoteCodeInfo {
+  set: boolean;
+  fingerprint?: string;
+  bits?: number;
+  pulse_us?: number;
+}
+
+export interface CaptureReport {
+  state: 'capturing' | 'captured' | 'nothing' | 'aborted' | 'saved' | 'idle';
+  button?: RemoteButton;
+  job?: number;
+  fingerprint?: string;
+  bits?: number;
+  pulse_us?: number;
+  frames?: number;
+  edges?: number;
+  age_s?: number;
+}
+
+export interface ControllerJob {
+  id: number;
+  gate_id: number;
+  kind: 'capture' | 'save_code';
+  button: RemoteButton;
+  seconds: number;
+  state: 'queued' | 'dispatched' | 'running' | 'done' | 'failed' | 'expired';
+  result: string;
+  detail: Partial<RemoteCodeInfo> & { frames?: number; edges?: number; previous_fingerprint?: string | null };
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ControllerJobsResponse {
+  supported: boolean;
+  buttons: Partial<Record<RemoteButton, RemoteCodeInfo>>;
+  capture: CaptureReport | null;
+  jobs: ControllerJob[];
+}
+
+export function getControllerJobs(gateId: number) {
+  return request<ControllerJobsResponse>(`/api/v1/gate/devices/${gateId}/controller-jobs/`);
+}
+
+export function queueControllerJob(gateId: number, job: { kind: ControllerJob['kind']; button: RemoteButton; seconds?: number }) {
+  return request<ControllerJob>(`/api/v1/gate/devices/${gateId}/controller-jobs/`, { method: 'POST', json: job });
+}
+
 // ---------------------------------------------------------------- config audit (admin)
 
 export interface ConfigChange {

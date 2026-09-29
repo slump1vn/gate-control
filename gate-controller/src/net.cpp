@@ -26,6 +26,7 @@ uint32_t offline_since = 0;
 uint32_t next_attempt = 0;
 uint32_t backoff = 1000;
 
+volatile bool hb_soon = false;
 const Config* hb_cfg = nullptr;
 std::function<void(JsonDocument&)> hb_fill;
 uint64_t hb_nonce = 0;
@@ -82,9 +83,13 @@ void heartbeat_task(void*) {
   esp_task_wdt_add(nullptr);
   for (;;) {
     esp_task_wdt_reset();
+    hb_soon = false;
     if (connected()) send_heartbeat();
-    esp_task_wdt_reset();
-    vTaskDelay(pdMS_TO_TICKS(HEARTBEAT_MS));
+    // Wait out the interval in short steps, so heartbeat_soon() is heard
+    for (uint32_t waited = 0; waited < HEARTBEAT_MS && !hb_soon; waited += 200) {
+      esp_task_wdt_reset();
+      vTaskDelay(pdMS_TO_TICKS(200));
+    }
   }
 }
 
@@ -152,6 +157,8 @@ void start_heartbeat(const Config& cfg, std::function<void(JsonDocument&)> fill)
   hb_fill = fill;
   xTaskCreatePinnedToCore(heartbeat_task, "heartbeat", 8192, nullptr, 1, nullptr, 0);
 }
+
+void heartbeat_soon() { hb_soon = true; }
 
 String url_path(const String& url) {
   int scheme = url.indexOf("://");

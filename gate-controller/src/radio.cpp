@@ -17,6 +17,8 @@ const size_t CAPTURE_MAX_EDGES = 2048;
 
 bool ok = false;
 uint32_t transmissions = 0;
+bool listening = false;
+uint32_t listen_until = 0;
 
 volatile uint32_t edge_at = 0;
 volatile size_t edge_count = 0;
@@ -98,6 +100,7 @@ bool ready() { return ok; }
 
 bool transmit(const std::vector<gatecore::Pulse>& pulses) {
   if (!ok || pulses.empty()) return false;
+  abort_capture();
   std::vector<rmt_item32_t> items;
   items.reserve(pulses.size() / 2 + 2);
   bool half = false;
@@ -122,18 +125,33 @@ bool transmit(const std::vector<gatecore::Pulse>& pulses) {
   return finished;
 }
 
-std::vector<uint32_t> capture(uint32_t ms) {
-  std::vector<uint32_t> out;
-  if (!ok) return out;
+bool start_capture(uint32_t ms) {
+  if (!ok || listening) return false;
   edge_count = 0;
   edge_at = micros();
   ELECHOUSE_cc1101.SetRx();
   attachInterrupt(digitalPinToInterrupt(PIN_CC1101_GDO2), on_edge, CHANGE);
-  uint32_t until = millis() + ms;
-  while (int32_t(until - millis()) > 0 && edge_count < CAPTURE_MAX_EDGES) delay(10);
-  detachInterrupt(digitalPinToInterrupt(PIN_CC1101_GDO2));
-  idle();
+  listening = true;
+  listen_until = millis() + ms;
+  return true;
+}
 
+bool capturing() { return listening; }
+
+bool capture_finished() {
+  return listening && (int32_t(listen_until - millis()) <= 0 || edge_count >= CAPTURE_MAX_EDGES);
+}
+
+void abort_capture() {
+  if (!listening) return;
+  detachInterrupt(digitalPinToInterrupt(PIN_CC1101_GDO2));
+  listening = false;
+  idle();
+}
+
+std::vector<uint32_t> take_capture() {
+  std::vector<uint32_t> out;
+  abort_capture();
   size_t n = edge_count;
   size_t first = 0;
   // Start at the first HIGH so levels alternate from HIGH, as decode expects
@@ -141,6 +159,12 @@ std::vector<uint32_t> capture(uint32_t ms) {
   out.reserve(n - first);
   for (size_t i = first; i < n; ++i) out.push_back(edges[i]);
   return out;
+}
+
+std::vector<uint32_t> capture(uint32_t ms) {
+  if (!start_capture(ms)) return {};
+  while (!capture_finished()) delay(10);
+  return take_capture();
 }
 
 uint32_t tx_count() { return transmissions; }

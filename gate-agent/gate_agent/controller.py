@@ -88,6 +88,37 @@ class ControllerClient:
         except ValueError:
             return {'ok': True}
 
+    def _request(self, path, payload):
+        """POST a signed JSON request that moves nothing (no local rate limit)."""
+        url = self.base_url + path
+        body = json.dumps(payload).encode()
+        try:
+            with self._lock:
+                headers = self._signed('POST', url, body)
+            response = self.session.post(url, data=body, headers=headers, timeout=self.timeout)
+        except requests.RequestException as exc:
+            raise ControllerError(f'Controller unreachable: {exc.__class__.__name__}')
+        if response.status_code >= 400:
+            try:
+                message = response.json().get('error', response.text)
+            except ValueError:
+                message = response.text
+            raise ControllerError(f'Controller refused {path}: HTTP {response.status_code} {message}',
+                                  response.status_code)
+        try:
+            return response.json()
+        except ValueError:
+            return {'ok': True}
+
+    def capture(self, button, seconds, job_id):
+        """Have a 433 MHz controller listen for a remote button. It answers at once;
+        what it heard comes back in its heartbeat."""
+        return self._request('capture', {'button': button, 'seconds': seconds, 'job': job_id})
+
+    def save_code(self, button):
+        """Keep the controller's last capture as `button`'s code."""
+        return self._request('capture/save', {'button': button})
+
     def status(self):
         url = self.base_url + 'status'
         try:

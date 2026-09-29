@@ -20,8 +20,8 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from ..models import AccessEvent, Camera, GateDevice
-from ..services import barrier_simulator, gate_service
+from ..models import AccessEvent, Camera, ControllerJob, GateDevice
+from ..services import barrier_simulator, controller_jobs, gate_service
 from ..services.api_service import ApiService
 from ..services.camera_service import VENDOR_PRESETS
 from ..utils.auth import device_request, require_agent_token, require_gate_operator
@@ -120,6 +120,27 @@ def api_gate_agent_commands(request):
         for e in gate_service.claim_pending_commands()
     ]
     return JsonResponse({'commands': commands})
+
+
+@require_http_methods(["GET"])
+@require_agent_token
+def api_gate_agent_jobs(request):
+    """Installer jobs (remote capture) for the agent to carry out on controllers."""
+    return JsonResponse({'jobs': [controller_jobs.agent_view(j) for j in controller_jobs.claim()]})
+
+
+@require_http_methods(["POST"])
+@require_agent_token
+def api_controller_job_result(request, job_id):
+    try:
+        body = json_body(request)
+    except BadRequest as exc:
+        return error(str(exc), 'INVALID_JSON')
+    job = ControllerJob.objects.filter(pk=job_id).select_related('gate', 'created_by').first()
+    if job is None:
+        return error('Job not found', 'NOT_FOUND', status=404)
+    controller_jobs.record_agent_result(job, body.get('sent'), body.get('result', ''), body.get('detail'))
+    return JsonResponse({'success': True})
 
 
 # Numbers only, and only the ones the UI shows: the agent is trusted to
@@ -281,6 +302,26 @@ def _controller_health(body):
         health['uptime_s'] = max(0, body['uptime_s'])
     return health
 
+def _simulated_capture(request, gate, auth, command):
+    """The 433 MHz controller's /capture and /capture/save, as the simulator does them."""
+    if auth.version < 2:
+        return error('Capture needs a signed request', 'UNAUTHORIZED', status=401)
+    try:
+        body = json_body(request)
+        barrier_simulator.accept_request(gate, auth.nonce, auth.ts)
+        if command == 'capture':
+            report = barrier_simulator.capture(gate, body.get('button'), body.get('job'))
+            # A real controller reports this in its next heartbeat
+            controller_jobs.apply_capture_report(gate, report)
+            return JsonResponse({'ok': True, 'command': 'capture', 'result': 'capturing'}, status=202)
+        buttons = barrier_simulator.save_code(gate, body.get('button'))
+        return JsonResponse({'ok': True, 'command': 'save_code', 'result': 'saved', 'buttons': buttons})
+    except BadRequest as exc:
+        return error(str(exc), 'INVALID_JSON')
+    except barrier_simulator.CommandRejected as exc:
+        return error(exc.message, 'REJECTED', status=exc.status)
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_gate_heartbeat(request):
@@ -302,6 +343,7 @@ def api_gate_heartbeat(request):
     gate.last_seen = timezone.now()
     fields = ['last_seen']
     health = _controller_health(body)
+    health.update(controller_jobs.clean_heartbeat(body))
     if health:
         gate.controller_health = health
         fields.append('controller_health')
@@ -316,6 +358,8 @@ def api_gate_heartbeat(request):
         gate.arm_state_at = gate.last_seen
         fields += ['arm_state', 'arm_state_at']
     gate.save(update_fields=fields)
+    if 'capture' in health:
+        controller_jobs.apply_capture_report(gate, health['capture'])
     # server_ts lets a device without SNTP set its clock (the signature window needs one)
     return JsonResponse({'success': True, 'server_time': iso(gate.last_seen), 'server_ts': time.time()})
 
@@ -409,6 +453,8 @@ def api_gate_simulator_device(request, gate_id, command):
 
     if request.method != 'POST':
         return error('Use POST for commands', 'METHOD_NOT_ALLOWED', status=405)
+    if command in ('capture', 'capture/save'):
+        return _simulated_capture(request, gate, auth, command)
     if auth.version >= 2:
         # Signed headers: the body is not needed for anything but the signature
         nonce, ts = auth.nonce, auth.ts

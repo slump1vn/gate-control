@@ -669,6 +669,60 @@ class SimulatedBarrier(models.Model):
         return f"Simulated barrier for {self.gate.name}"
 
 
+class ControllerJob(models.Model):
+    """
+    An installer's request to a gate controller that is not a barrier command:
+    capture a remote button's code, or keep what was captured. Queued here,
+    carried out by the gate agent (Django never contacts a controller), and
+    finished by the agent's report or, for a capture, by the controller's
+    next heartbeat. Codes never reach this table: only their fingerprints.
+    """
+
+    KINDS = [
+        ('capture', 'Capture a remote button'),
+        ('save_code', 'Keep the captured code'),
+    ]
+    BUTTONS = [
+        ('up', 'UP'),
+        ('down', 'DOWN'),
+        ('stop', 'STOP'),
+    ]
+    STATES = [
+        ('queued', 'Waiting for the agent'),
+        ('dispatched', 'Taken by the agent'),
+        ('running', 'Controller listening'),
+        ('done', 'Done'),
+        ('failed', 'Failed'),
+        ('expired', 'Expired'),
+    ]
+    ACTIVE_STATES = ('queued', 'dispatched', 'running')
+
+    gate = models.ForeignKey(GateDevice, on_delete=models.CASCADE, related_name='controller_jobs')
+    kind = models.CharField(max_length=10, choices=KINDS)
+    button = models.CharField(max_length=5, choices=BUTTONS)
+    seconds = models.PositiveSmallIntegerField(
+        default=6, validators=[MinValueValidator(2), MaxValueValidator(15)],
+        help_text='How long a capture listens.',
+    )
+    state = models.CharField(max_length=10, choices=STATES, default='queued', db_index=True)
+    result = models.CharField(max_length=100, blank=True)
+    detail = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Controller Job"
+        verbose_name_plural = "Controller Jobs"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.gate} {self.kind} {self.button} {self.state}"
+
+
 class GateConfigChange(models.Model):
     """Audit trail of changes to cameras and gate devices."""
 

@@ -9,7 +9,9 @@
 
 namespace gatecore {
 
-enum class Command { Open, Close, Stop, Status, Unknown };
+// Capture and SaveCode are the admin UI's remote capture (listen, then keep
+// what was heard); they move nothing, so no interlock or rate limit applies.
+enum class Command { Open, Close, Stop, Status, Capture, SaveCode, Unknown };
 
 Command parse_command(const std::string& path);
 const char* command_name(Command c);

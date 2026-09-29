@@ -361,6 +361,32 @@ def send_and_report(api, controller, label, command, event_id):
         return False
 
 
+def run_job(api, controller, job):
+    """Carry out one controller job and report what the controller said."""
+    kind, button = job['kind'], job['button']
+    try:
+        if controller is None:
+            raise ControllerError('No usable controller for this gate')
+        if kind == 'capture':
+            body = controller.capture(button, job.get('seconds', 6), job['id'])
+            detail = None
+        elif kind == 'save_code':
+            body = controller.save_code(button)
+            # Only the fingerprint of the kept code, never the code
+            detail = (body.get('buttons') or {}).get(button)
+        else:
+            raise ControllerError(f'Unknown job {kind!r}')
+        logger.info('Job %s: %s %s: %s', job['id'], kind, button, body.get('result'))
+        sent, result = True, body.get('result', 'ok')
+    except ControllerError as exc:
+        logger.error('Job %s: %s %s failed: %s', job['id'], kind, button, exc.message)
+        sent, result, detail = False, exc.message, None
+    try:
+        api.job_result(job['id'], sent, result, detail)
+    except Exception as exc:
+        logger.error('Job %s: could not report the result: %s', job['id'], exc)
+
+
 def _report(api, event_id, sent, result):
     try:
         api.command_result(event_id, sent, result)
@@ -473,6 +499,17 @@ class Agent:
                             command['command'], command['event_id'])
         return len(commands)
 
+    def process_jobs(self):
+        """Installer jobs from the admin UI: capture a remote button, keep its code."""
+        try:
+            jobs = self.api.agent_jobs()
+        except Exception as exc:
+            logger.error('Job poll failed: %s', exc)
+            return 0
+        for job in jobs:
+            run_job(self.api, self.controllers.get(job['gate_id']), job)
+        return len(jobs)
+
     # -- status ---------------------------------------------------------
     def report_status(self):
         cameras = [worker.status_readout() for worker in self.workers.values()]
@@ -497,6 +534,7 @@ class Agent:
                 self.report_status()
                 next_status = now + self.settings.status_interval
             self.process_commands()
+            self.process_jobs()
             self.stop_event.wait(self.settings.command_poll_interval)
         self.shutdown()
 

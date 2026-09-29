@@ -22,7 +22,7 @@ from django.views.decorators.http import require_http_methods
 
 from ..forms import CameraForm, GateDeviceForm, UserForm, VehicleForm
 from ..models import AccessEvent, Camera, GateCamera, GateConfigChange, GateDevice, Vehicle
-from ..services import barrier_simulator, camera_service, config_audit, gate_service, live_stream
+from ..services import barrier_simulator, camera_service, config_audit, controller_jobs, gate_service, live_stream
 from ..utils.auth import primary_role, require_gate_admin, require_gate_operator
 from ..utils.gate_serializers import (
     BadRequest, error, form_errors, json_body, paginate, serialize_camera,
@@ -306,6 +306,39 @@ def api_gate_devices(request):
     if err:
         return err
     return JsonResponse(serialize_gate(gate), status=201)
+
+
+@require_http_methods(["GET", "POST"])
+@require_gate_admin
+def api_gate_controller_jobs(request, gate_id):
+    """
+    Remote capture on a gate's controller (admin). GET: its recent jobs and what
+    the controller last reported (stored codes and the last capture, as
+    fingerprints). POST {kind: capture|save_code, button, seconds?}: queue a job
+    for the agent.
+    """
+    gate = GateDevice.objects.filter(pk=gate_id).first()
+    if gate is None:
+        return error('Gate not found', 'NOT_FOUND', status=404)
+    if request.method == 'POST':
+        body, err = _parse(request)
+        if err:
+            return err
+        try:
+            job = controller_jobs.create(gate, body.get('kind'), body.get('button'), request.user,
+                                         body.get('seconds', 6))
+        except controller_jobs.JobRefused as exc:
+            return error(exc.message, exc.code, status=409 if exc.code == 'BUSY' else 400)
+        return JsonResponse(controller_jobs.serialize(job), status=201)
+
+    controller_jobs.expire_stale()
+    health = gate.controller_health or {}
+    return JsonResponse({
+        'supported': gate.controller_type in controller_jobs.CAPTURE_CONTROLLERS,
+        'buttons': health.get('buttons') or {},
+        'capture': health.get('capture'),
+        'jobs': [controller_jobs.serialize(j) for j in gate.controller_jobs.select_related('created_by')[:10]],
+    })
 
 
 @require_http_methods(["GET", "PUT", "PATCH", "DELETE"])

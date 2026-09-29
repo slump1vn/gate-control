@@ -341,6 +341,43 @@ class AgentTest(unittest.TestCase):
         self.api.agent_commands.side_effect = ApiError('down')
         self.assertEqual(self.agent.process_commands(), 0)
 
+    def test_capture_jobs_run_and_report(self):
+        self.agent.apply_config(config(gate_config(1)))
+        controller = mock.Mock()
+        controller.capture.return_value = {'ok': True, 'result': 'capturing'}
+        controller.save_code.return_value = {
+            'ok': True, 'result': 'saved',
+            'buttons': {'up': {'set': True, 'fingerprint': 'abcd1234', 'bits': 24, 'pulse_us': 350}},
+        }
+        self.agent.controllers[1] = controller
+        self.api.agent_jobs.return_value = [
+            {'id': 7, 'gate_id': 1, 'kind': 'capture', 'button': 'up', 'seconds': 6},
+            {'id': 8, 'gate_id': 1, 'kind': 'save_code', 'button': 'up', 'seconds': 6},
+            {'id': 9, 'gate_id': 99, 'kind': 'capture', 'button': 'down', 'seconds': 6},
+        ]
+        self.assertEqual(self.agent.process_jobs(), 3)
+        controller.capture.assert_called_once_with('up', 6, 7)
+        controller.save_code.assert_called_once_with('up')
+        self.api.job_result.assert_any_call(7, True, 'capturing', None)
+        # Only the kept code's fingerprint goes back, never a code
+        self.api.job_result.assert_any_call(
+            8, True, 'saved', {'set': True, 'fingerprint': 'abcd1234', 'bits': 24, 'pulse_us': 350})
+        self.assertFalse(self.api.job_result.call_args_list[2].args[1])
+
+    def test_failed_job_and_failed_poll(self):
+        self.agent.apply_config(config(gate_config(1)))
+        controller = mock.Mock()
+        controller.capture.side_effect = ControllerError('Controller refused capture: HTTP 409 busy', 409)
+        self.agent.controllers[1] = controller
+        self.api.agent_jobs.return_value = [{'id': 3, 'gate_id': 1, 'kind': 'capture', 'button': 'up'}]
+        self.api.job_result.side_effect = ApiError('down')
+        with self.assertLogs('gate_agent', 'ERROR') as logs:
+            self.agent.process_jobs()
+        self.assertIn('busy', ' '.join(logs.output))
+        self.assertEqual(self.api.job_result.call_args.args[:2], (3, False))
+        self.api.agent_jobs.side_effect = ApiError('down')
+        self.assertEqual(self.agent.process_jobs(), 0)
+
     def test_status_report(self):
         self.agent.report_status()
         self.api.agent_status.assert_not_called()
@@ -363,6 +400,7 @@ class AgentTest(unittest.TestCase):
     def test_run_forever_until_stopped(self):
         self.api.agent_config.return_value = config(gate_config(1))
         self.api.agent_commands.return_value = []
+        self.api.agent_jobs.return_value = []
         calls = []
 
         def wait(delay):
