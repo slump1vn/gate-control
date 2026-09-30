@@ -6,7 +6,8 @@
 //   {"cmd":"set","ssid":"...","wifipw":"...","ssid2":"...","wifipw2":"...",
 //    "gate":1,"secret":"...",
 //    "hburl":"http://host:8000/api/v1/gate/heartbeat/","ntp":"...",
-//    "dry_run":true}                   any subset; saved to flash
+//    "dry_run":true,"setuppw":"..."}   any subset; saved to flash
+//                                      (setuppw: setup WiFi + /ui login, 8-63 chars)
 //   {"cmd":"restart"}
 //
 // Every command answers with one line starting "console: ".

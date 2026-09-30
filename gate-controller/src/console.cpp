@@ -46,6 +46,13 @@ void set(JsonDocument& doc) {
   if (doc["hburl"].is<const char*>()) c.heartbeat_url = doc["hburl"].as<const char*>(), ++changed;
   if (doc["ntp"].is<const char*>()) c.ntp_server = doc["ntp"].as<const char*>(), ++changed;
   if (doc["dry_run"].is<bool>()) c.dry_run = doc["dry_run"].as<bool>(), ++changed;
+  if (doc["setuppw"].is<const char*>()) {
+    // The setup access point's WPA2 password and the /ui login: WPA2 needs 8 to 63 characters
+    String pw = doc["setuppw"].as<const char*>();
+    if (pw.length() < 8 || pw.length() > 63) return answer("error: setuppw must be 8 to 63 characters");
+    c.setup_password = pw;
+    ++changed;
+  }
   config_store::save(c);
   answer("saved " + String(changed) + " setting(s); provisioned=" + (c.provisioned() ? "yes" : "no") +
          (c.provisioned() ? "; restart to use them" : ""));
