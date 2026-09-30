@@ -20,6 +20,9 @@ const size_t CAPTURE_MAX_EDGES = 2048;
 
 bool ok = false;
 uint32_t transmissions = 0;
+float tuned_mhz = 0;
+int8_t tuned_dbm = 0;
+int capture_rssi = 0;
 bool listening = false;
 uint32_t listen_until = 0;
 
@@ -82,6 +85,8 @@ bool begin(float frequency_mhz, int8_t power_dbm) {
   ELECHOUSE_cc1101.setCCMode(0);       // asynchronous serial: GDO0 is the data line
   ELECHOUSE_cc1101.setModulation(2);   // ASK/OOK
   ELECHOUSE_cc1101.setMHZ(frequency_mhz);
+  tuned_mhz = frequency_mhz;
+  tuned_dbm = power_dbm > 10 ? 10 : power_dbm;
   ELECHOUSE_cc1101.setPA(power_dbm > 10 ? 10 : power_dbm);
   idle();
 
@@ -165,9 +170,30 @@ std::vector<uint32_t> take_capture() {
 }
 
 std::vector<uint32_t> capture(uint32_t ms) {
+  capture_rssi = 0;
   if (!start_capture(ms)) return {};
-  while (!capture_finished()) delay(10);
+  int strongest = -200;
+  while (!capture_finished()) {
+    delay(10);
+    int rssi = ELECHOUSE_cc1101.getRssi();
+    if (rssi > strongest) strongest = rssi;
+  }
+  capture_rssi = strongest > -200 ? strongest : 0;
   return take_capture();
+}
+
+int last_capture_rssi() { return capture_rssi; }
+
+Diag diag() {
+  Diag d;
+  d.found = ok;
+  d.frequency_mhz = tuned_mhz;
+  d.power_dbm = tuned_dbm;
+  if (ok) {
+    d.partnum = ELECHOUSE_cc1101.SpiReadStatus(CC1101_PARTNUM);
+    d.version = ELECHOUSE_cc1101.SpiReadStatus(CC1101_VERSION);
+  }
+  return d;
 }
 
 uint32_t tx_count() { return transmissions; }

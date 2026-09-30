@@ -19,7 +19,15 @@ const uint32_t BACKOFF_MAX_MS = 30000;
 // Any time before this is an unset clock (the ESP32 boots in 1970)
 const int64_t VALID_EPOCH = 1700000000;
 
-String ssid, password;
+// A network that has not let us in after this long gives way to the other one
+const uint32_t NETWORK_TRY_MS = 20000;
+
+String ssid, password;     // primary
+String ssid2, password2;   // backup, may be empty
+bool on_backup_net = false;
+uint32_t attempt_started = 0;
+volatile int hb_status = 0;          // HTTP status of the last heartbeat, <0 transport error, 0 none yet
+volatile uint32_t hb_at_ms = 0;
 bool was_connected = false;
 bool stack_restarted = false;
 uint32_t offline_since = 0;
@@ -76,7 +84,21 @@ void send_heartbeat() {
     double server_ts = answer["server_ts"].as<double>();
     if (!clock_synced() || fabs(double(now_s()) - server_ts) > 5) set_clock(server_ts);
   }
+  hb_status = status;
+  hb_at_ms = millis();
   if (status != 200) log_w("Heartbeat: HTTP %d", status);
+}
+
+void join(bool backup) {
+  on_backup_net = backup;
+  attempt_started = millis();
+  WiFi.disconnect();
+  if (backup) {
+    WiFi.begin(ssid2.c_str(), password2.c_str());
+  } else {
+    WiFi.begin(ssid.c_str(), password.c_str());
+  }
+  Serial.printf("WiFi: joining %s \"%s\"\n", backup ? "backup" : "primary", backup ? ssid2.c_str() : ssid.c_str());
 }
 
 void heartbeat_task(void*) {
@@ -98,10 +120,12 @@ void heartbeat_task(void*) {
 void begin(const Config& cfg) {
   ssid = cfg.wifi_ssid;
   password = cfg.wifi_password;
+  ssid2 = cfg.wifi2_ssid;
+  password2 = cfg.wifi2_password;
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(("gate-ctl-" + String(cfg.gate_id)).c_str());
   WiFi.setAutoReconnect(true);
-  WiFi.begin(ssid.c_str(), password.c_str());
+  join(false);
   offline_since = millis();
   configTime(0, 0, cfg.ntp_server.c_str(), "pool.ntp.org");
 }
@@ -109,7 +133,11 @@ void begin(const Config& cfg) {
 void tick() {
   uint32_t now = millis();
   if (WiFi.status() == WL_CONNECTED) {
-    if (!was_connected) log_i("WiFi connected: %s, %d dBm", WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    // Printed, not logged: the installer needs this address for /manage/gates
+    if (!was_connected) {
+      Serial.printf("WiFi connected to %s \"%s\": %s, %d dBm\n", on_backup_net ? "backup" : "primary",
+                    WiFi.SSID().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    }
     was_connected = true;
     stack_restarted = false;
     backoff = 1000;
@@ -120,6 +148,13 @@ void tick() {
     was_connected = false;
     offline_since = now;
     next_attempt = now;
+    attempt_started = now;
+  }
+  if (ssid2.length() && now - attempt_started > NETWORK_TRY_MS) {
+    // This network will not have us: try the other one, and keep alternating
+    join(!on_backup_net);
+    next_attempt = now + backoff;
+    return;
   }
   uint32_t offline = now - offline_since;
   if (offline > REBOOT_AFTER_MS) {
@@ -132,7 +167,7 @@ void tick() {
     WiFi.mode(WIFI_OFF);
     delay(200);
     WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid.c_str(), password.c_str());
+    join(on_backup_net);
     stack_restarted = true;
     next_attempt = now + BACKOFF_MAX_MS;
     return;
@@ -159,6 +194,12 @@ void start_heartbeat(const Config& cfg, std::function<void(JsonDocument&)> fill)
 }
 
 void heartbeat_soon() { hb_soon = true; }
+
+String active_ssid() { return connected() ? WiFi.SSID() : String(); }
+bool on_backup() { return on_backup_net; }
+String ip() { return connected() ? WiFi.localIP().toString() : String(); }
+int last_heartbeat_status() { return hb_status; }
+uint32_t last_heartbeat_age_s() { return hb_at_ms ? (millis() - hb_at_ms) / 1000 : 0; }
 
 String url_path(const String& url) {
   int scheme = url.indexOf("://");

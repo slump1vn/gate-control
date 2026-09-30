@@ -41,6 +41,8 @@ bool load(Config& cfg) {
   if (!p.begin(NS, true)) return false;
   cfg.wifi_ssid = p.getString("ssid", "");
   cfg.wifi_password = p.getString("wifipw", "");
+  cfg.wifi2_ssid = p.getString("ssid2", "");
+  cfg.wifi2_password = p.getString("wifipw2", "");
   cfg.gate_id = p.getULong("gate", 0);
   cfg.secret = p.getString("secret", "");
   cfg.heartbeat_url = p.getString("hburl", "");
@@ -63,6 +65,8 @@ void save(const Config& cfg) {
   p.begin(NS, false);
   p.putString("ssid", cfg.wifi_ssid);
   p.putString("wifipw", cfg.wifi_password);
+  p.putString("ssid2", cfg.wifi2_ssid);
+  p.putString("wifipw2", cfg.wifi2_password);
   p.putULong("gate", cfg.gate_id);
   p.putString("secret", cfg.secret);
   p.putString("hburl", cfg.heartbeat_url);

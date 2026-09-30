@@ -115,6 +115,33 @@ console: **write it on the device label**. Join it and open `http://192.168.4.1/
 5. **Save and restart.** Setup mode also ends by itself after 10 minutes
    without use. It never serves the command API.
 
+## The device's own page, and the serial console
+
+In normal mode the same page is served at `http://<device IP>/ui/`, behind
+HTTP Basic auth: user `admin`, password the setup password on the device
+label (the page can open the gate). It shows:
+
+- **Connection checks**: the CC1101 (answers on SPI, PARTNUM/VERSION of a
+  real CC1101, frequency, power), WiFi (primary or backup, SSID, IP, signal),
+  the last heartbeat (HTTP status and age), clock and dry run.
+- **Listen to a remote** for 6 seconds: edges and frames heard, the strongest
+  signal in dBm, and whether it is a copyable fixed code, probably a rolling
+  code, or not an EV1527/PT2262 signal at all. Reads only; stores nothing.
+- **Try the gate**: Open / Close / Stop send the stored codes now, even in dry
+  run, still under the UP/DOWN interlock and the 3-second rate limit.
+- Pair / copy each button (fingerprints only), and the network form, including
+  a **backup WiFi**: when the primary cannot be joined for 20 seconds the
+  device switches to the backup, and keeps alternating until one lets it in.
+
+Over the USB serial port (115200 baud), one JSON object per line:
+`{"cmd":"show"}`, `{"cmd":"set","ssid":"…","wifipw":"…","ssid2":"…","wifipw2":"…","gate":1,"secret":"…","hburl":"…"}`,
+`{"cmd":"restart"}`. Secrets are never printed. The device also prints the
+WiFi network it joined and its IP address.
+
+Flashing through a network serial bridge (pyserial's RFC2217 example server)
+cannot drive the auto-reset into download mode in time; hold BOOT while the
+flasher connects.
+
 ## Capturing a remote from the admin UI
 
 Buttons can also be captured without setup mode, once the device is on the

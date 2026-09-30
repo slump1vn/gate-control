@@ -36,4 +36,17 @@ void abort_capture();
 
 uint32_t tx_count();
 
+// What the setup page shows about the module
+struct Diag {
+  bool found = false;       // the CC1101 answered on SPI at boot
+  uint8_t partnum = 0xFF;   // 0x00 on a CC1101
+  uint8_t version = 0xFF;   // 0x14 or 0x04 on a CC1101
+  float frequency_mhz = 0;
+  int8_t power_dbm = 0;
+};
+Diag diag();
+
+// Strongest signal (dBm) seen during the last blocking capture, or 0 if none was measured
+int last_capture_rssi();
+
 }  // namespace radio

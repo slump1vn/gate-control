@@ -13,6 +13,7 @@
 #include "api.h"
 #include "arm.h"
 #include "config.h"
+#include "console.h"
 #include "device.h"
 #include "net.h"
 #include "pins.h"
@@ -149,6 +150,7 @@ void setup() {
   }
 
   net::begin(device::cfg);
+  portal::begin_status(server);
   api::begin(server);
   net::start_heartbeat(device::cfg, [](JsonDocument& doc) {
     doc["firmware_version"] = GATE_FW_VERSION;
@@ -164,11 +166,11 @@ void setup() {
 
 void loop() {
   esp_task_wdt_reset();
+  console::tick();
   server.handleClient();
   status_light();
-  if (setup_mode) {
-    portal::tick();
-  } else {
+  portal::tick();
+  if (!setup_mode) {
     net::tick();
     remote::poll();
     const char* confirmed = arm::poll();

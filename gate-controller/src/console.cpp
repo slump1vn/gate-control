@@ -1,0 +1,90 @@
+#include "console.h"
+
+#include <Arduino.h>
+#include <ArduinoJson.h>
+
+#include "config.h"
+#include "device.h"
+
+namespace console {
+
+namespace {
+
+const size_t MAX_LINE = 1024;
+String line;
+
+void answer(const String& text) { Serial.println("console: " + text); }
+
+void show() {
+  const Config& c = device::cfg;
+  JsonDocument doc;
+  doc["firmware"] = GATE_FW_VERSION;
+  doc["ssid"] = c.wifi_ssid;
+  doc["wifi_password_set"] = c.wifi_password.length() > 0;
+  doc["ssid2"] = c.wifi2_ssid;
+  doc["wifi2_password_set"] = c.wifi2_password.length() > 0;
+  doc["gate"] = c.gate_id;
+  doc["secret_set"] = c.secret.length() > 0;
+  doc["hburl"] = c.heartbeat_url;
+  doc["ntp"] = c.ntp_server;
+  doc["dry_run"] = c.dry_run;
+  doc["provisioned"] = c.provisioned();
+  String out;
+  serializeJson(doc, out);
+  answer(out);
+}
+
+void set(JsonDocument& doc) {
+  Config& c = device::cfg;
+  int changed = 0;
+  if (doc["ssid"].is<const char*>()) c.wifi_ssid = doc["ssid"].as<const char*>(), ++changed;
+  if (doc["wifipw"].is<const char*>()) c.wifi_password = doc["wifipw"].as<const char*>(), ++changed;
+  if (doc["ssid2"].is<const char*>()) c.wifi2_ssid = doc["ssid2"].as<const char*>(), ++changed;
+  if (doc["wifipw2"].is<const char*>()) c.wifi2_password = doc["wifipw2"].as<const char*>(), ++changed;
+  if (doc["gate"].is<unsigned>()) c.gate_id = doc["gate"].as<unsigned>(), ++changed;
+  if (doc["secret"].is<const char*>()) c.secret = doc["secret"].as<const char*>(), ++changed;
+  if (doc["hburl"].is<const char*>()) c.heartbeat_url = doc["hburl"].as<const char*>(), ++changed;
+  if (doc["ntp"].is<const char*>()) c.ntp_server = doc["ntp"].as<const char*>(), ++changed;
+  if (doc["dry_run"].is<bool>()) c.dry_run = doc["dry_run"].as<bool>(), ++changed;
+  config_store::save(c);
+  answer("saved " + String(changed) + " setting(s); provisioned=" + (c.provisioned() ? "yes" : "no") +
+         (c.provisioned() ? "; restart to use them" : ""));
+}
+
+void run(const String& text) {
+  JsonDocument doc;
+  if (deserializeJson(doc, text)) return answer("error: not JSON");
+  String cmd = doc["cmd"] | "";
+  if (cmd == "show") return show();
+  if (cmd == "set") return set(doc);
+  if (cmd == "restart") {
+    answer("restarting");
+    Serial.flush();
+    delay(200);
+    ESP.restart();
+  }
+  answer("error: unknown cmd (show, set, restart)");
+}
+
+}  // namespace
+
+void tick() {
+  while (Serial.available()) {
+    char ch = char(Serial.read());
+    if (ch == '\n' || ch == '\r') {
+      if (line.length()) {
+        String text = line;
+        line = "";
+        text.trim();
+        if (text.startsWith("{")) run(text);
+      }
+    } else if (line.length() < MAX_LINE) {
+      line += ch;
+    } else {
+      line = "";
+      answer("error: line too long");
+    }
+  }
+}
+
+}  // namespace console

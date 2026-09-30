@@ -18,6 +18,9 @@ struct ButtonCode {
 struct Config {
   String wifi_ssid;
   String wifi_password;
+  // Backup WiFi, tried when the first one cannot be joined; empty = none
+  String wifi2_ssid;
+  String wifi2_password;
   uint32_t gate_id = 0;
   // The gate's controller token from /manage/gates: the HMAC key, never sent
   String secret;

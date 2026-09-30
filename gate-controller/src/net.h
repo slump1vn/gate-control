@@ -26,6 +26,14 @@ void start_heartbeat(const Config& cfg, std::function<void(JsonDocument&)> fill)
 // Send the next heartbeat now rather than at its turn (a capture result is waiting)
 void heartbeat_soon();
 
+// For the device's own status page
+String active_ssid();
+bool on_backup();
+String ip();
+// HTTP status of the last heartbeat (<0: could not reach the server, 0: none sent yet)
+int last_heartbeat_status();
+uint32_t last_heartbeat_age_s();
+
 // The path part of a URL ("http://host:8000/api/x/" -> "/api/x/")
 String url_path(const String& url);
 
