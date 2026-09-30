@@ -205,6 +205,16 @@ QWEN_REQUEST_TIMEOUT = config('QWEN_REQUEST_TIMEOUT', default=120.0, cast=float)
 # Retries after a failed or timed-out request. A retry of a request that
 # timed out rarely does better, and the gate decision has its own deadline.
 QWEN_MAX_RETRIES = config('QWEN_MAX_RETRIES', default=0, cast=int)
+# A second OpenAI-compatible model server (e.g. llama.cpp), used while the
+# primary times out, cannot be reached or answers 5xx. Empty turns it off. It
+# must serve a Qwen-VL model: plate coordinates are read on Qwen's 0-1000 scale.
+QWEN_FALLBACK_BASE_URL = config('QWEN_FALLBACK_BASE_URL', default='').strip()
+QWEN_FALLBACK_MODEL = config('QWEN_FALLBACK_MODEL', default='').strip()  # empty: QWEN_MODEL
+QWEN_FALLBACK_API_KEY = config('QWEN_FALLBACK_API_KEY', default='')  # empty: QWEN_API_KEY
+QWEN_FALLBACK_REQUEST_TIMEOUT = config('QWEN_FALLBACK_REQUEST_TIMEOUT', default=0.0, cast=float)  # 0: QWEN_REQUEST_TIMEOUT
+# After the primary fails, requests go straight to the fallback for this long
+# before the primary is tried again
+QWEN_PRIMARY_RETRY_SECONDS = config('QWEN_PRIMARY_RETRY_SECONDS', default=60.0, cast=float)
 
 # Gate automation (barrier control from plate recognition)
 GATE_MODE = config('GATE_MODE', default='shadow')  # shadow | live

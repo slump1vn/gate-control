@@ -2,8 +2,9 @@ import json
 import logging
 import time
 from typing import Optional, Dict, Any
-from openai import OpenAI, DefaultHttpxClient
 from django.conf import settings
+
+from . import model_router
 
 logger = logging.getLogger(__name__)
 
@@ -27,18 +28,8 @@ class QwenVLClient:
         if not self.api_key:
             raise ValueError("QWEN_API_KEY is not configured in settings")
         
-        # Create httpx client to avoid proxies parameter issue
-        # This fixes the compatibility issue between OpenAI and httpx
-        http_client = DefaultHttpxClient()
-        
-        self.client = OpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url,
-            http_client=http_client,
-            timeout=settings.QWEN_REQUEST_TIMEOUT,
-            max_retries=settings.QWEN_MAX_RETRIES,
-        )
-        
+        # Requests go through model_router: the primary server, or the
+        # fallback (QWEN_FALLBACK_BASE_URL) while the primary is failing
         logger.info(f"QwenVLClient initialized with model: {self.model}")
     
     def analyze_image(self, base64_image: str, prompt: str) -> Optional[str]:
@@ -72,17 +63,16 @@ class QwenVLClient:
             logger.info(f"DEBUG: Full endpoint: {self.base_url}/chat/completions")
             logger.info(f"DEBUG: API Key present: {bool(self.api_key)}")
             
-            response = self.client.chat.completions.create(
-                model=self.model,
+            response, endpoint = model_router.complete(
                 messages=messages,
                 max_tokens=4096,
                 temperature=0.1  # Low temperature for consistent results
             )
-            
+
             duration = (time.time() - start_time) * 1000  # Convert to milliseconds
-            
+
             result = response.choices[0].message.content
-            logger.info(f"API call completed successfully in {duration:.2f}ms")
+            logger.info(f"API call completed successfully in {duration:.2f}ms ({endpoint.name}: {endpoint.model})")
             
             return result
             
@@ -100,8 +90,7 @@ class QwenVLClient:
         try:
             # Send a simple test request
             test_prompt = "Hello, can you respond with 'OK'?"
-            response = self.client.chat.completions.create(
-                model=self.model,
+            response, _ = model_router.complete(
                 messages=[{"role": "user", "content": test_prompt}],
                 max_tokens=10
             )
@@ -142,8 +131,7 @@ class QwenVLClient:
                 
                 logger.info(f"DEBUG: Sending batch request {idx + 1}/{len(base64_images)} to Qwen3-VL API")
                 
-                response = self.client.chat.completions.create(
-                    model=self.model,
+                response, _ = model_router.complete(
                     messages=messages,
                     max_tokens=4096,
                     temperature=0.1

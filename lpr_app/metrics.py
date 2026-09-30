@@ -193,6 +193,19 @@ GATE_CONTROLLER_RSSI = Gauge(
     registry=REGISTRY
 )
 
+MODEL_REQUESTS = Counter(
+    'lpr_model_requests_total',
+    'Requests to model servers, by server (primary / fallback) and outcome',
+    ['endpoint', 'result'],
+    registry=REGISTRY
+)
+
+MODEL_PRIMARY_AVAILABLE = Gauge(
+    'lpr_model_primary_available',
+    'Whether requests go to the primary model server (0: to the fallback, after a failure)',
+    registry=REGISTRY
+)
+
 GATE_LIVE_MODE = Gauge(
     'lpr_gate_live_mode',
     'Whether GATE_MODE is live (1: real controllers move) or shadow (0)',
