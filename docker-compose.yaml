@@ -102,6 +102,8 @@ services:
       - QWEN_API_KEY=${QWEN_API_KEY:-sk-llamacpp-local}
       - QWEN_BASE_URL=${QWEN_BASE_URL:-http://llamacpp-cpu:8000/v1}
       - QWEN_MODEL=${QWEN_MODEL:-gpt-4-vision-preview}  # Model alias for compatibility
+      - QWEN_REQUEST_TIMEOUT=${QWEN_REQUEST_TIMEOUT:-120}
+      - QWEN_MAX_RETRIES=${QWEN_MAX_RETRIES:-0}
       
       # File Upload Settings
       - UPLOAD_FILE_MAX_SIZE=${UPLOAD_FILE_MAX_SIZE:-2097152}

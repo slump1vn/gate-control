@@ -197,6 +197,14 @@ RETRY_SCHEDULER_ENABLED = config('RETRY_SCHEDULER_ENABLED', default=True, cast=b
 QWEN_API_KEY = config('QWEN_API_KEY', default='')
 QWEN_BASE_URL = config('QWEN_BASE_URL', default='https://ollama.computedsynergy.com/v1')
 QWEN_MODEL = config('QWEN_MODEL', default='qwen3-vl-4b-instruct')
+# Seconds one model request may take before it is abandoned (and its
+# connection closed, which also stops the generation on Ollama/llama.cpp).
+# The OpenAI SDK's own default is 600 s with 2 retries: a hung model server
+# then holds a recognition thread for 30 minutes.
+QWEN_REQUEST_TIMEOUT = config('QWEN_REQUEST_TIMEOUT', default=120.0, cast=float)
+# Retries after a failed or timed-out request. A retry of a request that
+# timed out rarely does better, and the gate decision has its own deadline.
+QWEN_MAX_RETRIES = config('QWEN_MAX_RETRIES', default=0, cast=int)
 
 # Gate automation (barrier control from plate recognition)
 GATE_MODE = config('GATE_MODE', default='shadow')  # shadow | live

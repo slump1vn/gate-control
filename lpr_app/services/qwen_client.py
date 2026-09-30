@@ -34,7 +34,9 @@ class QwenVLClient:
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
-            http_client=http_client
+            http_client=http_client,
+            timeout=settings.QWEN_REQUEST_TIMEOUT,
+            max_retries=settings.QWEN_MAX_RETRIES,
         )
         
         logger.info(f"QwenVLClient initialized with model: {self.model}")

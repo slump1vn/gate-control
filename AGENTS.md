@@ -82,6 +82,8 @@ docker compose --profile core --profile cpu --profile gate up -d  # + gate camer
 Key variables (see `.env.example` and `.env.llamacpp.example` for full list):
 
 - `QWEN_API_KEY`, `QWEN_BASE_URL`, `QWEN_MODEL` — AI model connection
+- `QWEN_REQUEST_TIMEOUT` — Seconds one model request may take before it is abandoned; closing the connection also stops the generation on Ollama/llama.cpp (default: `120`). Without it the OpenAI SDK waits 600 s and retries twice, so a hung model server held every gate recognition thread for 30 minutes and every decision ended as `inference_timeout` with no frame read (`frames=0/0`). Keep it near `GATE_DECIDE_TIMEOUT` on a gate deployment
+- `QWEN_MAX_RETRIES` — Retries after a failed or timed-out model request (default: `0`)
 - `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS` — Django core
 - `CORS_ALLOWED_ORIGINS` — Comma-separated frontend origins allowed to access the API (default: `http://localhost:3000`)
 - `CORS_ALLOW_PRIVATE_NETWORK` — Allow browsers to access the API from a public origin when the API resolves to a private IP (default: `False`). Set to `True` when using Cloudflare-proxied frontend with a local API endpoint.
