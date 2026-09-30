@@ -49,22 +49,29 @@ jobs:
       - name: Host tests (signature, nonce, interlock, rate limit, RF frames)
         run: pio test -e native
 
-      - name: Build firmware
+      - name: Build firmware (ESP32-S3-DevKitC-1 and ESP-WROOM-32 DevKit)
         env:
           GATE_FW_BUILD_FLAGS: -DGATE_FW_VERSION=\"rf-${{ github.ref_type == 'tag' && github.ref_name || github.sha }}\"
-        run: pio run -e esp32s3
+        run: pio run -e esp32s3 -e esp32dev
 
+      # One image per board, flashed at 0x0 (esptool, or the browser flasher
+      # at https://espressif.github.io/esptool-js/)
       - name: Collect firmware
         run: |
           mkdir -p dist
-          cp .pio/build/esp32s3/firmware.bin dist/gate-controller-esp32s3.bin
-          cp .pio/build/esp32s3/bootloader.bin dist/bootloader.bin
-          cp .pio/build/esp32s3/partitions.bin dist/partitions.bin
-          sha256sum dist/*.bin > dist/SHA256SUMS
+          ESPTOOL="python $HOME/.platformio/packages/tool-esptoolpy/esptool.py"
+          BOOT_APP0=$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin
+          B=.pio/build/esp32s3
+          $ESPTOOL --chip esp32s3 merge_bin -o dist/gate-controller-esp32s3-merged.bin             --flash_mode keep --flash_freq keep --flash_size keep             0x0 $B/bootloader.bin 0x8000 $B/partitions.bin 0xe000 $BOOT_APP0 0x10000 $B/firmware.bin
+          B=.pio/build/esp32dev
+          $ESPTOOL --chip esp32 merge_bin -o dist/gate-controller-esp32dev-merged.bin             --flash_mode keep --flash_freq keep --flash_size keep             0x1000 $B/bootloader.bin 0x8000 $B/partitions.bin 0xe000 $BOOT_APP0 0x10000 $B/firmware.bin
+          cp .pio/build/esp32s3/firmware.bin dist/gate-controller-esp32s3-app.bin
+          cp .pio/build/esp32dev/firmware.bin dist/gate-controller-esp32dev-app.bin
+          (cd dist && sha256sum *.bin > SHA256SUMS)
 
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
-          name: gate-controller-esp32s3
+          name: gate-controller-firmware
           path: gate-controller/dist/
           retention-days: 90

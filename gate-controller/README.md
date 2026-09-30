@@ -22,7 +22,8 @@ separate buttons** with separate codes. Open a guard's remote and read the chip:
 
 ## Parts (per gate)
 
-- ESP32-S3-DevKitC-1 (N8R2 or N16R8)
+- One of the two supported boards: ESP32-S3-DevKitC-1 (N8R2 or N16R8), or an
+  ESP-WROOM-32 DevKit (the common 30-pin board, USB-C or micro-USB, CH340C or CP2102)
 - CC1101 module **labelled 433 MHz**, with an SMA connector (for example Ebyte
   E07-M1101D-SMA). A module tuned for 315 or 868 MHz transmits poorly at 433.
 - 433 MHz SMA antenna, or a 17.3 cm straight wire
@@ -33,20 +34,31 @@ separate buttons** with separate codes. Open a guard's remote and read the chip:
 
 ## Wiring
 
-| CC1101 | ESP32-S3 | |
-|---|---|---|
-| VCC | 3V3 | **never 5 V** |
-| GND | GND | |
-| SCK | GPIO12 | |
-| MOSI (SI) | GPIO11 | |
-| MISO (SO) | GPIO13 | |
-| CSN | GPIO10 | |
-| GDO0 | GPIO4 | transmit data |
-| GDO2 | GPIO5 | receive data (capture only) |
+| CC1101 | ESP32-S3-DevKitC-1 | ESP-WROOM-32 DevKit (label on the board) | |
+|---|---|---|---|
+| VCC | 3V3 | 3V3 | **never 5 V / VIN** |
+| GND | GND | GND | |
+| SCK | GPIO12 | D18 | |
+| MOSI (SI) | GPIO11 | D23 | |
+| MISO (SO) | GPIO13 | D19 | |
+| CSN | GPIO10 | D5 | |
+| GDO0 | GPIO4 | D4 | transmit data |
+| GDO2 | GPIO5 | D16 | receive data (capture only) |
+| arm UP limit (optional) | GPIO6 | D32 | dry contact to GND |
+| arm DOWN limit (optional) | GPIO7 | D33 | dry contact to GND |
+| status LED | on-board RGB | on-board "D2" LED | |
+
+On the 30-pin ESP-WROOM-32 DevKit every CC1101 wire lands on the header row
+with 3V3/GND/D15/D2/D4…D23. Leave D12, D2 and D15 alone (they decide how the
+chip boots) and D34/D35/VP/VN (inputs only, no pull-ups).
+
+Status LED: setup mode = blue / fast blink; no WiFi = red / a short flash
+every second; dry run or clock not synced = amber / slow blink; ready =
+green / steady.
 
 Optional arm feedback: if the controller's `UP LIMIT OUTPUT` / `DOWN LIMIT
 OUTPUT` are **dry contacts** (check with a meter: no voltage across them),
-wire each contact between GPIO6 / GPIO7 and ESP32 GND, and build with
+wire each contact between the pins above and ESP32 GND, and build with
 `-DGATE_ARM_FEEDBACK=1`. An `open` is then confirmed in the heartbeat
 (`open: ok` or `open: not_confirmed`). Without it, commands are reported as
 `sent (unconfirmed)`. Never connect a powered output to a GPIO.
@@ -59,12 +71,26 @@ Pins are in `include/pins.h`.
 pip install platformio
 cd gate-controller
 pio test -e native            # host tests: signature, nonce, interlock, rate limit, RF frames
-pio run -e esp32s3 -t upload  # flash over the USB port marked "USB"
+pio run -e esp32s3 -t upload  # ESP32-S3: flash over the USB port marked "USB"
+pio run -e esp32dev -t upload # ESP-WROOM-32 DevKit
 pio device monitor            # logs, and the setup-mode password on first boot
 ```
 
 CI (`.github/workflows/gate-controller-build.yml`) runs the tests and publishes
-`gate-controller-esp32s3.bin` as a build artifact.
+the artifact `gate-controller-firmware`, with one image per board to flash at
+**0x0**: `gate-controller-esp32s3-merged.bin` and
+`gate-controller-esp32dev-merged.bin` (bootloader, partition table and
+firmware in one file).
+
+Without PlatformIO, flash the merged image from a browser (Chrome or Edge):
+open https://espressif.github.io/esptool-js/, **Connect**, pick the board's
+serial port (CH340/CP210x: install its USB driver first if none appears),
+set the flash address to `0x0`, choose the `-merged.bin` file for the board
+and **Program**. Or from a terminal: `pip install esptool`, then
+`esptool.py --chip esp32 write_flash 0x0 gate-controller-esp32dev-merged.bin`
+(`--chip esp32s3` for the S3). If the board does not start flashing, hold
+BOOT while it connects. Open a serial monitor at 115200 baud afterwards: the
+first boot prints the setup-mode WiFi name and password.
 
 ## Setup mode
 

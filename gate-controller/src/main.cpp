@@ -20,6 +20,49 @@
 #include "radio.h"
 #include "remote.h"
 
+// ---------------------------------------------------------------- status LED
+//
+// RGB board (S3): a colour per state. One-colour board (ESP32 DevKit's D2):
+// the same states as blink patterns.
+//   setup mode        blue            fast blink (5 Hz)
+//   no WiFi           red             short flash every second
+//   dry run / clock   amber           slow blink (1 Hz)
+//   ready             green           steady on
+//   transmitting      white           on
+
+enum LedState { LED_OFF, LED_SETUP, LED_NO_WIFI, LED_ATTENTION, LED_READY, LED_TX };
+
+void led_show(LedState state) {
+#if STATUS_LED_RGB
+  static const uint8_t colours[][3] = {
+      {0, 0, 0}, {0, 0, 24}, {24, 0, 0}, {24, 16, 0}, {0, 12, 0}, {16, 16, 16},
+  };
+  // Written only on a change: each write is an RMT transmission
+  static int shown = -1;
+  if (shown == int(state)) return;
+  shown = int(state);
+  const uint8_t* c = colours[state];
+  neopixelWrite(PIN_STATUS_LED, c[0], c[1], c[2]);
+#else
+  static bool ready = false;
+  if (!ready) {
+    pinMode(PIN_STATUS_LED, OUTPUT);
+    ready = true;
+  }
+  uint32_t t = millis();
+  bool on;
+  switch (state) {
+    case LED_SETUP: on = (t / 100) % 2 == 0; break;
+    case LED_NO_WIFI: on = t % 1000 < 100; break;
+    case LED_ATTENTION: on = t % 1000 < 500; break;
+    case LED_READY:
+    case LED_TX: on = true; break;
+    default: on = false;
+  }
+  digitalWrite(PIN_STATUS_LED, on ? HIGH : LOW);
+#endif
+}
+
 namespace device {
 
 Config cfg;
@@ -49,9 +92,9 @@ String last_result() {
 bool transmit_button(Button b) {
   const ButtonCode& code = cfg.buttons[b];
   if (!code.set || !radio::ready()) return false;
-  neopixelWrite(PIN_STATUS_LED, 16, 16, 16);
+  led_show(LED_TX);
   bool ok = radio::transmit(gatecore::encode_burst(code.code, code.profile, cfg.repeats));
-  neopixelWrite(PIN_STATUS_LED, 0, 0, 0);
+  led_show(LED_OFF);
   return ok;
 }
 
@@ -76,18 +119,11 @@ bool setup_button_held() {
 }
 
 void status_light() {
-  static uint32_t next = 0;
-  if (int32_t(millis() - next) < 0) return;
-  next = millis() + 1000;
-  if (setup_mode) {
-    neopixelWrite(PIN_STATUS_LED, 0, 0, 24);  // blue
-  } else if (!net::connected()) {
-    neopixelWrite(PIN_STATUS_LED, 24, 0, 0);  // red
-  } else if (device::cfg.dry_run || !net::clock_synced()) {
-    neopixelWrite(PIN_STATUS_LED, 24, 16, 0);  // amber
-  } else {
-    neopixelWrite(PIN_STATUS_LED, 0, 12, 0);  // green
-  }
+  LedState state = setup_mode ? LED_SETUP
+                   : !net::connected() ? LED_NO_WIFI
+                   : (device::cfg.dry_run || !net::clock_synced()) ? LED_ATTENTION
+                   : LED_READY;
+  led_show(state);
 }
 
 }  // namespace

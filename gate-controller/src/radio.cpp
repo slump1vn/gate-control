@@ -3,6 +3,7 @@
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <driver/rmt.h>
 #include <soc/gpio_reg.h>
+#include <soc/soc_caps.h>
 
 #include "pins.h"
 
@@ -10,7 +11,9 @@ namespace radio {
 
 namespace {
 
-const rmt_channel_t TX_CHANNEL = RMT_CHANNEL_0;
+// The last transmit channel (3 on the S3, 7 on the ESP32): Arduino's
+// neopixelWrite (the S3's status LED) takes the lowest free one for itself
+const rmt_channel_t TX_CHANNEL = rmt_channel_t(SOC_RMT_TX_CANDIDATES_PER_GROUP - 1);
 // RMT durations are 15-bit; longer levels are split across items
 const uint32_t RMT_MAX_TICKS = 32767;
 const size_t CAPTURE_MAX_EDGES = 2048;
