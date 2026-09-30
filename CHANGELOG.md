@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Open on approach**: a gate can open as soon as a vehicle is seen coming toward a camera, before its plate is read, for vehicles arriving, leaving or both, optionally only at set hours (e.g. rush hours). The plate is still read and written onto the same event (reason "Opened on approach"), so the log still says who came through
 - The gate controller's own web page is also served in normal mode at `/ui/` (behind the setup password) and now checks the CC1101, WiFi and server connections, listens to a remote and says whether its code can be copied, and tries Open / Close / Stop directly. A backup WiFi network takes over when the primary cannot be joined. The controller can also be provisioned over its USB serial port
 - The gate controller firmware also builds for the common 30-pin ESP-WROOM-32 DevKit (`pio run -e esp32dev`), with its own pin map and the on-board LED as a blinking status light. CI publishes a single image per board to flash at 0x0, from a browser if need be
 - Fallback model server (`QWEN_FALLBACK_BASE_URL`, e.g. llama.cpp): when the primary times out, cannot be reached or answers 5xx, recognition moves to the fallback, stays there for `QWEN_PRIMARY_RETRY_SECONDS`, then tries the primary again. Metrics `lpr_model_requests_total` and `lpr_model_primary_available` show which server is answering

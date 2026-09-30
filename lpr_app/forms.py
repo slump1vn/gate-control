@@ -73,7 +73,7 @@ class GateDeviceForm(forms.ModelForm):
         model = GateDevice
         fields = [
             'name', 'location', 'controller_type', 'controller_url', 'exit_policy',
-            'has_safety_input', 'is_enabled',
+            'approach_open', 'approach_hours', 'has_safety_input', 'is_enabled',
         ]
 
     def clean_controller_token(self):

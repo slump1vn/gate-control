@@ -36,12 +36,23 @@ class LprApi:
             return None
         return self._check(response).json()
 
-    def decide(self, gate_id, jpeg_frames, timeout, camera_id=None):
+    def approach(self, gate_id, camera_id):
+        """A vehicle is coming toward this camera: does the gate open for it right now?"""
+        response = self.session.post(
+            self._url('/api/v1/gate/approach/'), json={'gate_id': gate_id, 'camera_id': camera_id},
+            timeout=self.timeout,
+        )
+        return self._check(response).json()
+
+    def decide(self, gate_id, jpeg_frames, timeout, camera_id=None, approach_event_id=None):
         files = [('frames', (f'frame{i}.jpg', data, 'image/jpeg')) for i, data in enumerate(jpeg_frames)]
         data = {'gate_id': gate_id}
         if camera_id is not None:
             # Tells the service which way the vehicle was going
             data['camera_id'] = camera_id
+        if approach_event_id is not None:
+            # The gate already opened on approach: the read only fills in that event
+            data['approach_event_id'] = approach_event_id
         response = self.session.post(
             self._url('/api/v1/gate/decide/'), data=data, files=files, timeout=timeout,
         )

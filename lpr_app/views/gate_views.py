@@ -70,8 +70,12 @@ def api_gate_decide(request):
     # Which of the gate's cameras saw the vehicle, and so which way it was going
     camera_id = request.POST.get('camera_id') or ''
     camera_id = int(camera_id) if camera_id.isdigit() else None
+    # The gate already opened on approach: the read only fills in that event
+    approach_event_id = request.POST.get('approach_event_id') or ''
+    approach_event_id = int(approach_event_id) if approach_event_id.isdigit() else None
 
-    decision = gate_service.decide(gate_id, frames, started=started, camera_id=camera_id)
+    decision = gate_service.decide(gate_id, frames, started=started, camera_id=camera_id,
+                                   approach_event_id=approach_event_id)
     event = decision.event
     return JsonResponse({
         'success': True,
@@ -90,6 +94,36 @@ def api_gate_decide(request):
         'actuate': decision.actuate,
         'command': 'open' if decision.actuate else None,
         'decision_latency_ms': event.decision_latency_ms,
+    })
+
+
+@require_http_methods(["POST"])
+@require_agent_token
+def api_gate_approach(request):
+    """
+    A vehicle is coming toward one of the gate's cameras. When the gate opens on
+    approach for that direction at this hour, the grant is recorded now and the
+    agent opens before any plate is read; otherwise {"approach": false} and the
+    agent goes on to read the plate as usual.
+    """
+    try:
+        body = json_body(request)
+    except BadRequest as exc:
+        return error(str(exc), 'INVALID_JSON')
+    gate_id = body.get('gate_id')
+    camera_id = body.get('camera_id')
+    if not isinstance(gate_id, int) or not isinstance(camera_id, int):
+        return error('gate_id and camera_id are required', 'MISSING_GATE')
+    decision = gate_service.approach(gate_id, camera_id)
+    if decision is None:
+        return JsonResponse({'approach': False})
+    return JsonResponse({
+        'approach': True,
+        'event_id': decision.event.id,
+        'direction': decision.event.direction,
+        'mode': decision.event.mode,
+        'actuate': decision.actuate,
+        'command': 'open' if decision.actuate else None,
     })
 
 
@@ -221,6 +255,8 @@ def _agent_gate(request, gate):
         'name': gate.name,
         'has_safety_input': gate.has_safety_input,
         'exit_policy': gate.exit_policy,
+        # The agent asks /approach/ only for these directions; the hours are checked there
+        'approach_open': gate.approach_open,
         'controller_type': gate.controller_type,
         'controller_url': controller_url,
         'controller_token': token,

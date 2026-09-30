@@ -128,6 +128,9 @@ function GatesContent() {
                         {t(g.online ? 'gates.online' : 'gates.offline')}
                       </Badge>
                       {g.has_safety_input && <Badge color="blue">{t('gates.safety')}</Badge>}
+                      {g.approach_open && g.approach_open !== 'off' && (
+                        <Badge color="yellow" title={g.approach_hours || undefined}>{t('gates.approach')}</Badge>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap space-x-3">

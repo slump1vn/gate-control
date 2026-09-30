@@ -30,6 +30,7 @@ urlpatterns = [
     path('api/v1/gate/agent-config/', gate_views.api_gate_agent_config, name='api_gate_agent_config'),
     path('api/v1/gate/agent-status/', gate_views.api_gate_agent_status, name='api_gate_agent_status'),
     path('api/v1/gate/agent-commands/', gate_views.api_gate_agent_commands, name='api_gate_agent_commands'),
+    path('api/v1/gate/approach/', gate_views.api_gate_approach, name='api_gate_approach'),
     path('api/v1/gate/agent-jobs/', gate_views.api_gate_agent_jobs, name='api_gate_agent_jobs'),
     path('api/v1/gate/controller-jobs/<int:job_id>/result/', gate_views.api_controller_job_result, name='api_controller_job_result'),
     path('api/v1/gate/events/<int:event_id>/command-result/', gate_views.api_gate_command_result, name='api_gate_command_result'),

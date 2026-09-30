@@ -83,6 +83,10 @@ plate straddling the zone's edge is not cut in half.
 If plates are still missed, in order: shrink the read zone to where the plate
 actually is, lower `settle_ms` on the camera, then lower `AGENT_FRAME_INTERVAL`.
 
+## Opening as a vehicle approaches
+
+A gate can open before any plate is read: **Open on approach** in `/manage/gates` (vehicles arriving, leaving or both, optionally only at set hours). When the trigger fires for a new vehicle at a camera of that direction, the agent asks `/api/v1/gate/approach/` first and, if the gate opens on approach at this hour, opens at once; then it reads the plate as usual and the service writes it onto the same event. A retry of the same vehicle, or a vehicle heading away, never opens this way. Every trigger at such a camera opens the gate, so set its **Vehicles to read** to *coming toward the camera* and keep the read zone tight (`lpr_gate_agent_approach_opens_total` counts the openings).
+
 ## Two events for one vehicle
 
 Where a gate has a camera at each end of the lane, both see every vehicle: the

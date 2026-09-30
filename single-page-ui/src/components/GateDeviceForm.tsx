@@ -3,7 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { ApiError } from '@/lib/gate-api';
 import { useI18n } from './I18nContext';
-import type { ControllerType, Direction, GateDevice, GateDeviceInput } from '@/lib/gate-api';
+import type { ApproachOpen, ControllerType, Direction, GateDevice, GateDeviceInput } from '@/lib/gate-api';
 import { Alert, Badge, Checkbox, Field, inputClass, primaryButton, secondaryButton } from './ui';
 
 interface GateDeviceFormProps {
@@ -22,6 +22,8 @@ export default function GateDeviceForm({ gate, cameras, onSubmit, onCancel }: Ga
     cameras: gate ? gate.cameras.map((c) => ({ camera: c.id, direction: c.direction }))
                   : [{ camera: 0, direction: 'in' }, { camera: 0, direction: 'out' }],
     exit_policy: gate?.exit_policy ?? 'registered',
+    approach_open: gate?.approach_open ?? 'off',
+    approach_hours: gate?.approach_hours ?? '',
     controller_type: gate?.controller_type ?? 'simulator',
     controller_url: gate?.controller_url ?? '',
     has_safety_input: gate?.has_safety_input ?? false,
@@ -103,6 +105,23 @@ export default function GateDeviceForm({ gate, cameras, onSubmit, onCancel }: Ga
             <option value="any">{t('gateForm.exitAny')}</option>
           </select>
         </Field>
+        <Field label={t('gateForm.approach')} htmlFor="gate-approach" error={errors.approach_open}
+          hint={t('gateForm.approachHint')}>
+          <select id="gate-approach" className={inputClass} value={data.approach_open}
+            onChange={(e) => set('approach_open', e.target.value as ApproachOpen)}>
+            <option value="off">{t('gateForm.approachOff')}</option>
+            <option value="in">{t('gateForm.approachIn')}</option>
+            <option value="out">{t('gateForm.approachOut')}</option>
+            <option value="both">{t('gateForm.approachBoth')}</option>
+          </select>
+        </Field>
+        {data.approach_open !== 'off' && (
+          <Field label={t('gateForm.approachHours')} htmlFor="gate-approach-hours" error={errors.approach_hours}
+            hint={t('gateForm.approachHoursHint')}>
+            <input id="gate-approach-hours" className={`${inputClass} font-mono`} placeholder="06:30-08:00, 16:30-18:00"
+              value={data.approach_hours} onChange={(e) => set('approach_hours', e.target.value)} />
+          </Field>
+        )}
         <Field label={t('gateForm.controller')} htmlFor="gate-controller-type" error={errors.controller_type}
           hint={t(simulated ? 'gateForm.simulatorHint'
             : data.controller_type === 'esp32_rf' ? 'gateForm.esp32RfHint' : 'gateForm.esp32Hint')}>

@@ -33,6 +33,7 @@ from django.utils import timezone
 
 from .. import metrics
 from ..models import AccessEvent, GateCamera, GateDevice, ProcessingLog, UploadedImage
+from ..utils import time_windows
 from ..utils.plates import normalize_plate
 from . import plate_matcher
 from .image_processing_service import ImageProcessingService
@@ -304,7 +305,57 @@ def evaluate(reads, pending=0, at=None):
 # Entry point
 # ---------------------------------------------------------------------------
 
-def decide(gate_id, uploaded_files, started=None, is_test=False, camera_id=None):
+# How long after an approach opening its recognition result may still be attached to it
+APPROACH_ATTACH_SECONDS = 120
+
+
+def approach_active(gate, direction, at=None):
+    """Whether a vehicle seen coming toward this gate's `direction` camera opens it now."""
+    if gate is None or not gate.is_enabled or direction not in ('in', 'out'):
+        return False
+    if gate.approach_open not in (direction, 'both'):
+        return False
+    local = timezone.localtime(at or timezone.now())
+    return time_windows.contains(gate.approach_hours, local)
+
+
+def approach(gate_id, camera_id):
+    """
+    A vehicle is coming toward one of the gate's cameras. If the gate opens on
+    approach for that direction at this hour, record a grant at once and have
+    the agent open, before any plate is read; the recognition that follows is
+    attached to the same event (decide(approach_event_id=...)). Returns the
+    Decision, or None when opening on approach does not apply.
+    """
+    started = time.monotonic()
+    gate = GateDevice.objects.filter(pk=gate_id).first() if gate_id else None
+    direction = camera_direction(gate, camera_id) if gate else ''
+    if not approach_active(gate, direction):
+        return None
+    mode = effective_mode()
+    event = AccessEvent.objects.create(
+        gate=gate, camera_id=camera_id, direction=direction,
+        decision='granted', reason='approach_open', mode=mode, command='open',
+        decision_latency_ms=_elapsed_ms(started),
+    )
+    metrics.record_gate_decision(event)
+    actuate = can_actuate(gate, mode)
+    logger.info('Gate %s opened on approach (%s) mode=%s', gate.name, direction, mode)
+    return Decision(event=event, outcome=Outcome(reason='approach_open'), actuate=actuate)
+
+
+def _approach_event(gate, approach_event_id):
+    """The approach opening a recognition belongs to, if it is recent and still unread."""
+    if not approach_event_id:
+        return None
+    since = timezone.now() - timezone.timedelta(seconds=APPROACH_ATTACH_SECONDS)
+    return AccessEvent.objects.filter(
+        pk=approach_event_id, gate=gate, reason='approach_open', timestamp__gte=since, frames_read=0,
+        plate_normalized='',
+    ).first()
+
+
+def decide(gate_id, uploaded_files, started=None, is_test=False, camera_id=None, approach_event_id=None):
     """
     Make and record a decision for a burst of frames from one gate.
 
@@ -341,6 +392,27 @@ def decide(gate_id, uploaded_files, started=None, is_test=False, camera_id=None)
         discard_frame(image_id)
 
     match = outcome.match
+    opened = _approach_event(gate, approach_event_id) if not is_test else None
+    if opened is not None:
+        # Already opened on approach: this read only says who it was, on the same event
+        opened.plate_raw = outcome.plate_raw[:64]
+        opened.plate_normalized = outcome.plate[:20]
+        opened.confidence = outcome.confidence
+        opened.frames_read = outcome.frames_read
+        opened.frames_agreed = outcome.frames_agreed
+        opened.vehicle = match.vehicle if match else None
+        opened.near_miss_vehicle = match.near_miss if match else None
+        opened.uploaded_image_id = evidence_id
+        opened.save(update_fields=[
+            'plate_raw', 'plate_normalized', 'confidence', 'frames_read', 'frames_agreed',
+            'vehicle', 'near_miss_vehicle', 'uploaded_image',
+        ])
+        if kept:
+            opened.frames.set(kept)
+        logger.info('Gate %s approach opening read as %s (%s)', gate.name, opened.plate_normalized or '-',
+                    outcome.reason)
+        return Decision(event=opened, outcome=outcome, actuate=False, discarded=discarded)
+
     # Leaving a gate that is open to everyone: record what was read, open anyway.
     exit_free = direction == 'out' and gate.exit_policy == 'any' and not outcome.granted
     granted = outcome.granted or exit_free

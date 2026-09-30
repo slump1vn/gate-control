@@ -102,6 +102,8 @@ def serialize_gate(g):
         'cameras': [gate_camera(link) for link in links],
         'camera_warning': g.camera_warning(),
         'exit_policy': g.exit_policy,
+        'approach_open': g.approach_open,
+        'approach_hours': g.approach_hours,
         'controller_type': g.controller_type,
         'controller_url': g.controller_url,
         'controller_token_set': g.controller_token_set,

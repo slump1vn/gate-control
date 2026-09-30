@@ -202,6 +202,7 @@ export const REASONS: Record<string, string> = {
   processing_error: 'Recognition failed',
   manual_override: 'Manual override',
   exit_free: 'Exit open to every vehicle',
+  approach_open: 'Opened on approach',
 };
 
 export const DIRECTION_LABELS: Record<string, string> = {
@@ -335,6 +336,8 @@ export interface GateCamera {
   live_stream_url?: string | null;
 }
 
+export type ApproachOpen = 'off' | 'in' | 'out' | 'both';
+
 export interface GateDevice {
   id: number;
   name: string;
@@ -344,6 +347,10 @@ export interface GateDevice {
   /** Why the cameras are not enough yet; empty when they are. */
   camera_warning: string;
   exit_policy: 'registered' | 'any';
+  /** Open as soon as a vehicle comes toward a camera of these directions, before its plate is read. */
+  approach_open?: ApproachOpen;
+  /** When that applies, e.g. "06:30-08:00, 16:30-18:00"; empty: all day. */
+  approach_hours?: string;
   controller_type: ControllerType;
   controller_url: string;
   controller_token_set: boolean;
@@ -512,6 +519,10 @@ export interface GateDeviceInput {
   location: string;
   cameras: { camera: number; direction: Direction }[];
   exit_policy: 'registered' | 'any';
+  /** Open as soon as a vehicle comes toward a camera of these directions, before its plate is read. */
+  approach_open?: ApproachOpen;
+  /** When that applies, e.g. "06:30-08:00, 16:30-18:00"; empty: all day. */
+  approach_hours?: string;
   controller_type: ControllerType;
   controller_url: string;
   controller_token?: string;

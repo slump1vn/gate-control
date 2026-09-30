@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from .utils.plates import normalize_plate
 from .utils.secrets import decrypt_secret, encrypt_secret
+from .utils.time_windows import validate_time_windows
 
 
 def _guid_filename(filename):
@@ -428,6 +429,12 @@ class GateDevice(models.Model):
         ('registered', 'Only registered vehicles'),
         ('any', 'Every vehicle (plates are still read and logged)'),
     ]
+    APPROACH_OPEN = [
+        ('off', 'Off: every vehicle is read first'),
+        ('in', 'Vehicles arriving'),
+        ('out', 'Vehicles leaving'),
+        ('both', 'Vehicles arriving and leaving'),
+    ]
     # A gate watches both directions, so it needs a camera for each. Fewer is
     # allowed — an installer configures them one at a time — but the admin says so.
     RECOMMENDED_CAMERAS = 2
@@ -453,6 +460,16 @@ class GateDevice(models.Model):
         max_length=12, choices=EXIT_POLICIES, default='registered',
         help_text='What happens when a camera watching the exit reads a vehicle. '
                   '"Every vehicle" still reads and logs the plate, but opens regardless.',
+    )
+    approach_open = models.CharField(
+        max_length=4, choices=APPROACH_OPEN, default='off',
+        help_text='Open as soon as a vehicle is seen coming toward a camera of these directions, '
+                  'before its plate is read. The plate is still read and logged on the same event.',
+    )
+    approach_hours = models.CharField(
+        max_length=100, blank=True, validators=[validate_time_windows],
+        help_text='When opening on approach applies, e.g. "06:30-08:00, 16:30-18:00" (TIME_ZONE); '
+                  'a window may cross midnight ("22:00-06:00"). Empty: all day.',
     )
     controller_type = models.CharField(
         max_length=10, choices=CONTROLLER_TYPES, default='esp32',
@@ -571,6 +588,7 @@ class AccessEvent(models.Model):
         ('processing_error', 'Recognition failed'),
         ('manual_override', 'Manual override'),
         ('exit_free', 'Exit open to every vehicle'),
+        ('approach_open', 'Opened on approach'),
     ]
 
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)

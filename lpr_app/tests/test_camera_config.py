@@ -458,7 +458,7 @@ class CameraAdminTest(TestCase):
         response = self.client.post('/admin/lpr_app/gatedevice/add/', {
             'name': 'Main', 'location': '',
             'controller_type': 'esp32', 'controller_url': 'http://192.168.1.50', 'controller_token': 'tok123',
-            'exit_policy': 'registered',
+            'exit_policy': 'registered', 'approach_open': 'off',
             'is_enabled': 'on',
             'gate_cameras-TOTAL_FORMS': '0', 'gate_cameras-INITIAL_FORMS': '0',
             'gate_cameras-MIN_NUM_FORMS': '0', 'gate_cameras-MAX_NUM_FORMS': '1000',

@@ -6,6 +6,8 @@ FRAMES = Counter('lpr_gate_agent_frames_total', 'Camera frames grabbed', ['gate'
 TRIGGERS = Counter('lpr_gate_agent_triggers_total', 'Recognition bursts triggered', ['gate'])
 # Vehicles left unread because they were heading the other way (camera travel_direction)
 PASSED = Counter('lpr_gate_agent_passed_total', 'Vehicles not read: heading the other way', ['gate'])
+APPROACH_OPENS = Counter('lpr_gate_agent_approach_opens_total',
+                         'Openings for a vehicle coming toward the camera, before its plate was read', ['gate'])
 RELEARNED = Counter('lpr_gate_agent_relearned_total',
                     'Zone relearned as the empty lane after reads that found no plate', ['gate'])
 # Measured, not configured: a slow camera or a slow network lowers it

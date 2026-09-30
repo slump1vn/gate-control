@@ -19,7 +19,7 @@ from . import metrics
 from .api import ApiError
 from .camera import CameraError, EndOfSource, SnapshotSource, build_source, crop_roi, encode_jpeg
 from .controller import ControllerClient, ControllerError
-from .trigger import IDLE, MOTION, PASSING, PresenceTrigger, prepare
+from .trigger import AWAY, IDLE, MOTION, PASSING, PresenceTrigger, prepare
 
 logger = logging.getLogger('gate_agent')
 
@@ -257,17 +257,47 @@ class GateWorker(threading.Thread):
             encoded.append(data)
         return encoded
 
+    def approach(self):
+        """
+        A new vehicle is coming in: if the gate opens on approach for this
+        camera's direction (and, the service decides, at this hour), open now,
+        before the plate is read. Returns the service's answer when it opened.
+        """
+        setting = self.gate.get('approach_open', 'off')
+        if setting not in (self.camera.get('direction'), 'both'):
+            return None
+        # Only a vehicle arriving: not a second look at the same one, not one driving away
+        if self.trigger.attempts > 1 or self.trigger.heading == AWAY:
+            return None
+        try:
+            answer = self.api.approach(self.gate['id'], self.camera['id'])
+        except Exception as exc:
+            # Nothing opens; the plate is read as usual
+            logger.error('Gate %s: approach request failed: %s', self.label, exc)
+            return None
+        if not answer.get('approach'):
+            return None
+        metrics.APPROACH_OPENS.labels(gate=self.label).inc()
+        logger.info('Gate %s: vehicle approaching; opening before the read (actuate=%s)', self.label,
+                    answer.get('actuate'))
+        if answer.get('actuate'):
+            self.open_barrier(answer['event_id'])
+        return answer
+
     def handle_trigger(self, first_frame):
         """Capture a burst, ask for a decision, open on a grant. Returns the decision dict or None."""
         metrics.TRIGGERS.labels(gate=self.label).inc()
         started = self.clock()
         result = None
+        opened = None
         try:
+            opened = self.approach()
             frames = self.capture_burst(first_frame)
             if not frames:
                 return None
             timeout = self.config.get('decide_timeout_seconds', 8) + 5
-            result = self.api.decide(self.gate['id'], frames, timeout=timeout, camera_id=self.camera['id'])
+            result = self.api.decide(self.gate['id'], frames, timeout=timeout, camera_id=self.camera['id'],
+                                     approach_event_id=opened['event_id'] if opened else None)
             metrics.DECISION_ROUNDTRIP.labels(gate=self.label).observe(self.clock() - started)
             metrics.DECISIONS.labels(gate=self.label, decision=result['decision'], reason=result['reason']).inc()
             logger.info(
@@ -288,7 +318,7 @@ class GateWorker(threading.Thread):
         finally:
             relearned = self.trigger.relearned
             self.trigger.decided(
-                bool(result and result.get('decision') == 'granted'), self.clock(),
+                bool(opened) or bool(result and result.get('decision') == 'granted'), self.clock(),
                 empty=bool(result and result.get('reason') == 'no_plate'),
             )
             if self.trigger.relearned != relearned:

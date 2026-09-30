@@ -122,6 +122,71 @@ class GateWorkerTest(unittest.TestCase):
         api.command_result.assert_called_once_with(7, True, 'ok')
         self.assertEqual(worker.camera_status, 'streaming')
 
+    def approach_worker(self, setting='in', answer=None, direction='in'):
+        api = mock.Mock()
+        api.approach.return_value = answer if answer is not None else {
+            'approach': True, 'event_id': 41, 'actuate': True, 'command': 'open'}
+        api.decide.return_value = {'decision': 'granted', 'reason': 'approach_open', 'actuate': False,
+                                   'event_id': 41, 'plate': '30A12345'}
+        controller = mock.Mock()
+        controller.send.return_value = {'result': 'sent'}
+        gate = gate_config(approach_open=setting, cameras=[camera_config(11, direction)])
+        worker, _ = self.make_worker([], api, controller, gate=gate)
+        return worker, api, controller
+
+    def test_opens_on_approach_before_the_read_and_attaches_it(self):
+        worker, api, controller = self.approach_worker()
+        calls = []
+        api.approach.side_effect = lambda *a: calls.append('approach') or {
+            'approach': True, 'event_id': 41, 'actuate': True}
+        controller.send.side_effect = lambda cmd: calls.append(cmd) or {'result': 'sent'}
+        api.decide.side_effect = lambda *a, **k: calls.append('decide') or {
+            'decision': 'granted', 'reason': 'approach_open', 'actuate': False, 'event_id': 41}
+        worker.handle_trigger(frame(car=True))
+        # Opened first, read afterwards, and the read goes onto the same event
+        self.assertEqual(calls, ['approach', 'open', 'decide'])
+        api.approach.assert_called_once_with(1, 11)
+        self.assertEqual(api.decide.call_args.kwargs['approach_event_id'], 41)
+        api.command_result.assert_called_once_with(41, True, 'sent')
+        self.assertTrue(worker.trigger.last_granted)
+
+    def test_approach_that_does_not_apply_reads_as_usual(self):
+        worker, api, controller = self.approach_worker(answer={'approach': False})
+        api.decide.return_value = {'decision': 'denied', 'reason': 'not_registered', 'actuate': False, 'event_id': 5}
+        worker.handle_trigger(frame(car=True))
+        controller.send.assert_not_called()
+        self.assertIsNone(api.decide.call_args.kwargs['approach_event_id'])
+
+    def test_shadow_mode_approach_records_but_does_not_open(self):
+        worker, api, controller = self.approach_worker(answer={'approach': True, 'event_id': 41, 'actuate': False})
+        worker.handle_trigger(frame(car=True))
+        controller.send.assert_not_called()
+        self.assertEqual(api.decide.call_args.kwargs['approach_event_id'], 41)
+
+    def test_no_approach_for_other_directions_retries_or_departures(self):
+        worker, api, _ = self.approach_worker(setting='out')
+        worker.handle_trigger(frame(car=True))
+        api.approach.assert_not_called()
+        worker, api, _ = self.approach_worker(setting='both')
+        worker.trigger.attempts = 2
+        worker.handle_trigger(frame(car=True))
+        api.approach.assert_not_called()
+        worker, api, _ = self.approach_worker(setting='both')
+        worker.trigger.heading = 'away'
+        worker.handle_trigger(frame(car=True))
+        api.approach.assert_not_called()
+        worker, api, _ = self.approach_worker(setting='both', direction='out')
+        worker.handle_trigger(frame(car=True))
+        api.approach.assert_called_once()
+
+    def test_failed_approach_request_still_reads(self):
+        worker, api, controller = self.approach_worker()
+        api.approach.side_effect = ApiError('HTTP 500', 500)
+        with self.assertLogs('gate_agent', 'ERROR'):
+            worker.handle_trigger(frame(car=True))
+        controller.send.assert_not_called()
+        api.decide.assert_called_once()
+
     def test_denied_never_opens(self):
         api = mock.Mock()
         api.decide.return_value = {'decision': 'denied', 'reason': 'not_registered', 'actuate': False, 'event_id': 8}
