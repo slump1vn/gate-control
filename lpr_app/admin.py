@@ -9,7 +9,7 @@ from django.utils.safestring import mark_safe
 from .models import (
     UploadedImage, ProcessingLog,
     Vehicle, Camera, GateDevice, AccessEvent, GateConfigChange, SimulatedBarrier,
-    GateCamera,
+    GateCamera, PlateAlert, AlertDelivery,
 )
 from .forms import CameraForm, GateDeviceForm
 from .services import barrier_simulator, config_audit, gate_service
@@ -235,6 +235,25 @@ class VehicleAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'vehicle_type', 'department')
     search_fields = ('plate_normalized', 'plate_display', 'owner_name', 'department')
     readonly_fields = ('plate_normalized', 'created_at', 'updated_at')
+
+
+@admin.register(PlateAlert)
+class PlateAlertAdmin(admin.ModelAdmin):
+    list_display = ('plate_display', 'plate_normalized', 'label', 'directions', 'chat_ids', 'is_active',
+                    'last_notified_at')
+    list_filter = ('is_active', 'directions')
+    search_fields = ('plate_normalized', 'plate_display', 'label')
+    readonly_fields = ('plate_normalized', 'last_notified_at', 'created_at', 'updated_at')
+
+
+@admin.register(AlertDelivery)
+class AlertDeliveryAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'alert', 'event', 'chat_id', 'status', 'error')
+    list_filter = ('status',)
+    readonly_fields = ('alert', 'event', 'chat_id', 'status', 'error', 'created_at')
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(Camera)

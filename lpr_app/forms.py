@@ -7,7 +7,7 @@ from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 
-from .models import Camera, GateDevice, Vehicle
+from .models import Camera, GateDevice, PlateAlert, Vehicle
 from .services import camera_service
 from .utils.secrets import SecretKeyMissing, encrypt_secret
 
@@ -78,6 +78,12 @@ class GateDeviceForm(forms.ModelForm):
 
     def clean_controller_token(self):
         return _check_secret_key(self.cleaned_data.get('controller_token'))
+
+
+class PlateAlertForm(forms.ModelForm):
+    class Meta:
+        model = PlateAlert
+        fields = ['plate_display', 'label', 'directions', 'chat_ids', 'is_active']
 
 
 class VehicleForm(forms.ModelForm):

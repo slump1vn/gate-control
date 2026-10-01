@@ -617,6 +617,73 @@ export function getConfigChanges(params?: { object_type?: string; object_id?: nu
   return request<Paginated<ConfigChange>>(`/api/v1/gate/config-changes/${query(params)}`);
 }
 
+// ---------------------------------------------------------------- plate alerts (admin)
+
+export type AlertDirections = 'both' | 'in' | 'out';
+
+export interface PlateAlert {
+  id: number;
+  plate_display: string;
+  plate_normalized: string;
+  label: string;
+  directions: AlertDirections;
+  /** Comma-separated Telegram chat ids; empty sends to the server's TELEGRAM_CHAT_IDS. */
+  chat_ids: string;
+  is_active: boolean;
+  last_notified_at: string | null;
+  last_delivery: {
+    status: 'pending' | 'sent' | 'failed';
+    error: string;
+    chat_id: string;
+    at: string | null;
+    event_id: number | null;
+  } | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface PlateAlertInput {
+  plate_display: string;
+  label: string;
+  directions: AlertDirections;
+  chat_ids: string;
+  is_active: boolean;
+}
+
+export interface TelegramStatus {
+  configured: boolean;
+  default_recipients: number;
+  cooldown_seconds: number;
+}
+
+export interface TelegramTestResult {
+  chat_id: string;
+  ok: boolean;
+  error: string;
+}
+
+export function getPlateAlerts() {
+  return request<{ results: PlateAlert[]; telegram: TelegramStatus }>('/api/v1/gate/plate-alerts/');
+}
+
+export function createPlateAlert(data: PlateAlertInput) {
+  return request<PlateAlert>('/api/v1/gate/plate-alerts/', { method: 'POST', json: data });
+}
+
+export function updatePlateAlert(id: number, data: Partial<PlateAlertInput>) {
+  return request<PlateAlert>(`/api/v1/gate/plate-alerts/${id}/`, { method: 'PATCH', json: data });
+}
+
+export function deletePlateAlert(id: number) {
+  return request<{ success: boolean }>(`/api/v1/gate/plate-alerts/${id}/`, { method: 'DELETE' });
+}
+
+export function sendTelegramTest(chatId?: string) {
+  return request<{ results: TelegramTestResult[] }>('/api/v1/gate/plate-alerts/test/', {
+    method: 'POST', json: chatId ? { chat_id: chatId } : {},
+  });
+}
+
 // ---------------------------------------------------------------- users (admin)
 
 export interface AppUser {

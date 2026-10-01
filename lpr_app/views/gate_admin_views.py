@@ -11,6 +11,7 @@ PUT and PATCH are both partial: omitted fields keep their current values.
 import base64
 import logging
 
+from django.conf import settings
 from django.contrib.auth.models import Group, User
 from django.db import transaction
 from django.db.models import Q
@@ -20,13 +21,16 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
-from ..forms import CameraForm, GateDeviceForm, UserForm, VehicleForm
-from ..models import AccessEvent, Camera, GateCamera, GateConfigChange, GateDevice, Vehicle
-from ..services import barrier_simulator, camera_service, config_audit, controller_jobs, gate_service, live_stream
+from ..forms import CameraForm, GateDeviceForm, PlateAlertForm, UserForm, VehicleForm
+from ..models import AccessEvent, Camera, GateCamera, GateConfigChange, GateDevice, PlateAlert, Vehicle
+from ..services import (
+    barrier_simulator, camera_service, config_audit, controller_jobs, gate_service, live_stream, plate_alerts,
+)
 from ..utils.auth import primary_role, require_gate_admin, require_gate_operator
 from ..utils.gate_serializers import (
     BadRequest, error, form_errors, json_body, paginate, serialize_camera,
-    serialize_config_change, serialize_event, serialize_gate, serialize_user, serialize_vehicle,
+    serialize_config_change, serialize_event, serialize_gate, serialize_plate_alert, serialize_user,
+    serialize_vehicle,
 )
 from ..utils.plates import clean_plate, normalize_plate
 from ..utils.secrets import SecretDecryptError, SecretKeyMissing
@@ -442,6 +446,75 @@ def api_vehicle_detail(request, vehicle_id):
         return form_errors(form)
     vehicle = form.save()
     return JsonResponse(serialize_vehicle(vehicle))
+
+
+# ---------------------------------------------------------------------------
+# Plate alerts (Telegram)
+# ---------------------------------------------------------------------------
+
+def _telegram_status():
+    return {
+        'configured': plate_alerts.configured(),
+        'default_recipients': len(plate_alerts.default_chat_ids()),
+        'cooldown_seconds': settings.TELEGRAM_ALERT_COOLDOWN_SECONDS,
+    }
+
+
+@require_http_methods(["GET", "POST"])
+@require_gate_admin
+def api_plate_alerts(request):
+    """Plates announced on Telegram when they pass a gate (admins)."""
+    if request.method == 'GET':
+        alerts = PlateAlert.objects.all()
+        return JsonResponse({
+            'results': [serialize_plate_alert(a) for a in alerts],
+            'telegram': _telegram_status(),
+        })
+    body, err = _parse(request)
+    if err:
+        return err
+    form = _bound_form(PlateAlertForm, body, PlateAlert())
+    if not form.is_valid():
+        return form_errors(form)
+    alert = config_audit.save_with_audit(form.save(commit=False), request.user)
+    return JsonResponse(serialize_plate_alert(alert), status=201)
+
+
+@require_http_methods(["GET", "PATCH", "DELETE"])
+@require_gate_admin
+def api_plate_alert_detail(request, alert_id):
+    alert = PlateAlert.objects.filter(pk=alert_id).first()
+    if alert is None:
+        return error('Alert not found', 'NOT_FOUND', status=404)
+    if request.method == 'GET':
+        return JsonResponse(serialize_plate_alert(alert))
+    if request.method == 'DELETE':
+        config_audit.delete_with_audit(alert, request.user)
+        return JsonResponse({'success': True})
+    body, err = _parse(request)
+    if err:
+        return err
+    form = _bound_form(PlateAlertForm, body, alert)
+    if not form.is_valid():
+        return form_errors(form)
+    alert = config_audit.save_with_audit(form.save(commit=False), request.user)
+    return JsonResponse(serialize_plate_alert(alert))
+
+
+@require_http_methods(["POST"])
+@require_gate_admin
+def api_plate_alert_test(request):
+    """Send a test message to the default recipients, or to {"chat_id": ...}."""
+    if not plate_alerts.configured():
+        return error('TELEGRAM_BOT_TOKEN is not set on the server', 'NOT_CONFIGURED', status=400)
+    body, err = _parse(request)
+    if err:
+        return err
+    chat = str(body.get('chat_id') or '').strip()
+    chats = [chat] if chat else plate_alerts.default_chat_ids()
+    if not chats:
+        return error('No recipient: set TELEGRAM_CHAT_IDS or give a chat_id', 'NO_RECIPIENT', status=400)
+    return JsonResponse({'results': plate_alerts.send_test(chats)})
 
 
 @require_http_methods(["GET"])

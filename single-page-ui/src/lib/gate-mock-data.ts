@@ -1,5 +1,6 @@
 import type {
-  AccessEvent, AppUser, Camera, CameraPresets, CameraTestResult, ConfigChange, GateDevice, GateStatus, Vehicle,
+  AccessEvent, AppUser, Camera, CameraPresets, CameraTestResult, ConfigChange, GateDevice, GateStatus, PlateAlert,
+  Vehicle,
 } from './gate-api';
 
 export const mockVehicle: Vehicle = {
@@ -320,5 +321,27 @@ export const mockConfigChanges: ConfigChange[] = [
     id: 1, timestamp: '2026-09-20T08:00:00Z', user: 'admin', object_type: 'camera', object_id: 1,
     object_repr: 'Camera cổng chính', action: 'create',
     changes: { name: { old: null, new: 'Camera cổng chính' }, host: { old: null, new: '192.168.1.64' } },
+  },
+];
+
+export const mockPlateAlerts: PlateAlert[] = [
+  {
+    id: 1, plate_display: '30A-123.45', plate_normalized: '30A12345', label: 'Xe Giám đốc', directions: 'both',
+    chat_ids: '', is_active: true, last_notified_at: '2026-10-01T01:12:00Z',
+    last_delivery: { status: 'sent', error: '', chat_id: '-1001234567890', at: '2026-10-01T01:12:00Z', event_id: 120 },
+    created_at: '2026-09-30T08:00:00Z', updated_at: '2026-09-30T08:00:00Z',
+  },
+  {
+    id: 2, plate_display: '51F-999.99', plate_normalized: '51F99999', label: 'Nhà cung cấp', directions: 'in',
+    chat_ids: '-1009876543210, @baove', is_active: true, last_notified_at: '2026-09-30T09:40:00Z',
+    last_delivery: {
+      status: 'failed', error: 'HTTP 400 Bad Request: chat not found', chat_id: '@baove', at: '2026-09-30T09:40:00Z', event_id: 98,
+    },
+    created_at: '2026-09-29T08:00:00Z', updated_at: '2026-09-29T08:00:00Z',
+  },
+  {
+    id: 3, plate_display: '29H-555.55', plate_normalized: '29H55555', label: '', directions: 'out',
+    chat_ids: '', is_active: false, last_notified_at: null, last_delivery: null,
+    created_at: '2026-09-28T08:00:00Z', updated_at: '2026-09-28T08:00:00Z',
   },
 ];

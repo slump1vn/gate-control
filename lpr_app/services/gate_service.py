@@ -35,7 +35,7 @@ from .. import metrics
 from ..models import AccessEvent, GateCamera, GateDevice, ProcessingLog, UploadedImage
 from ..utils import time_windows
 from ..utils.plates import normalize_plate
-from . import plate_matcher
+from . import plate_alerts, plate_matcher
 from .image_processing_service import ImageProcessingService
 
 logger = logging.getLogger(__name__)
@@ -409,6 +409,7 @@ def decide(gate_id, uploaded_files, started=None, is_test=False, camera_id=None,
         ])
         if kept:
             opened.frames.set(kept)
+        plate_alerts.notify_for_event(opened)
         logger.info('Gate %s approach opening read as %s (%s)', gate.name, opened.plate_normalized or '-',
                     outcome.reason)
         return Decision(event=opened, outcome=outcome, actuate=False, discarded=discarded)
@@ -439,6 +440,7 @@ def decide(gate_id, uploaded_files, started=None, is_test=False, camera_id=None,
         event.frames.set(kept)
     if not is_test:
         metrics.record_gate_decision(event)
+        plate_alerts.notify_for_event(event)
     actuate = granted and can_actuate(gate, mode)
     logger.info(
         'Gate %s decision: %s (%s) plate=%s conf=%s frames=%d/%d mode=%s latency=%dms',

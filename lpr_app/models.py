@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 
 from django.db import models
@@ -685,6 +686,82 @@ class SimulatedBarrier(models.Model):
 
     def __str__(self):
         return f"Simulated barrier for {self.gate.name}"
+
+
+class PlateAlert(models.Model):
+    """
+    A plate whose passing through a gate is announced on Telegram, e.g. a
+    director's car or a vehicle to watch for. Independent of the registry: the
+    plate may or may not be a registered vehicle, and the gate's decision is
+    not affected.
+    """
+
+    DIRECTIONS = [
+        ('both', 'Arriving and leaving'),
+        ('in', 'Arriving'),
+        ('out', 'Leaving'),
+    ]
+
+    plate_display = models.CharField(max_length=32, verbose_name='Plate Number')
+    plate_normalized = models.CharField(max_length=20, unique=True, editable=False)
+    label = models.CharField(max_length=100, blank=True, help_text='Shown in the message, e.g. "Director\'s car".')
+    directions = models.CharField(max_length=4, choices=DIRECTIONS, default='both')
+    chat_ids = models.CharField(
+        max_length=255, blank=True,
+        help_text='Telegram chat ids for this plate, separated by commas. Empty: TELEGRAM_CHAT_IDS.',
+    )
+    is_active = models.BooleanField(default=True)
+    last_notified_at = models.DateTimeField(null=True, blank=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Plate Alert'
+        verbose_name_plural = 'Plate Alerts'
+        ordering = ['plate_normalized']
+
+    def __str__(self):
+        return f'{self.plate_display} ({self.label})' if self.label else self.plate_display
+
+    def clean(self):
+        normalized = normalize_plate(self.plate_display)
+        if not normalized:
+            raise ValidationError({'plate_display': 'Plate number is required.'})
+        conflict = PlateAlert.objects.filter(plate_normalized=normalized).exclude(pk=self.pk).first()
+        if conflict:
+            raise ValidationError({'plate_display': f'An alert for {conflict.plate_display} already exists.'})
+        for chat in self.chat_id_list():
+            if not re.fullmatch(r'-?\d{1,20}|@[A-Za-z0-9_]{5,32}', chat):
+                raise ValidationError({'chat_ids': f'"{chat}" is not a Telegram chat id.'})
+
+    def save(self, *args, **kwargs):
+        self.plate_normalized = normalize_plate(self.plate_display)
+        super().save(*args, **kwargs)
+
+    def chat_id_list(self):
+        return [c.strip() for c in self.chat_ids.split(',') if c.strip()]
+
+
+class AlertDelivery(models.Model):
+    """One Telegram message sent (or attempted) for a plate alert."""
+
+    STATES = [
+        ('pending', 'Sending'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+    ]
+
+    alert = models.ForeignKey(PlateAlert, null=True, on_delete=models.SET_NULL, related_name='deliveries')
+    event = models.ForeignKey('AccessEvent', null=True, on_delete=models.CASCADE, related_name='alert_deliveries')
+    chat_id = models.CharField(max_length=64)
+    status = models.CharField(max_length=8, choices=STATES, default='pending', db_index=True)
+    error = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'Alert Delivery'
+        verbose_name_plural = 'Alert Deliveries'
+        ordering = ['-created_at']
 
 
 class ControllerJob(models.Model):

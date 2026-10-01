@@ -4,7 +4,7 @@ Audit trail for camera and gate device configuration changes.
 Secret fields are recorded only as 'changed', never with their values.
 """
 
-from ..models import Camera, GateConfigChange, GateDevice
+from ..models import Camera, GateConfigChange, GateDevice, PlateAlert
 from . import camera_service
 
 SECRET_FIELDS = {
@@ -23,6 +23,7 @@ AUDITED_FIELDS = {
         'name', 'location', 'controller_type', 'controller_url', 'exit_policy', 'approach_open', 'approach_hours',
         'has_safety_input', 'is_enabled',
     ],
+    PlateAlert: ['plate_display', 'label', 'directions', 'chat_ids', 'is_active'],
 }
 
 # Public names for secret fields in the audit record
@@ -38,7 +39,8 @@ def snapshot(obj):
         return None
     model = type(obj)
     values = {f: getattr(obj, f) for f in AUDITED_FIELDS[model]}
-    values[SECRET_FIELDS[model]] = getattr(obj, SECRET_FIELDS[model])
+    if model in SECRET_FIELDS:
+        values[SECRET_FIELDS[model]] = getattr(obj, SECRET_FIELDS[model])
     return values
 
 
@@ -50,10 +52,11 @@ def diff(before, obj):
         new = getattr(obj, field)
         if before is None or old != new:
             changes[field] = {'old': old, 'new': new}
-    secret = SECRET_FIELDS[model]
-    old_secret = before.get(secret) if before else ''
-    if (old_secret or '') != (getattr(obj, secret) or ''):
-        changes[SECRET_LABELS[secret]] = 'changed'
+    secret = SECRET_FIELDS.get(model)
+    if secret:
+        old_secret = before.get(secret) if before else ''
+        if (old_secret or '') != (getattr(obj, secret) or ''):
+            changes[SECRET_LABELS[secret]] = 'changed'
     return changes
 
 
@@ -172,6 +175,14 @@ def record_user_change(actor, user, action, changes):
         action=action,
         changes=_json_safe(changes),
     )
+
+
+def save_with_audit(obj, user):
+    """Save any audited object that has no secret, recording what changed."""
+    before = _db_snapshot(obj)
+    obj.save()
+    record_change(user, obj, before)
+    return obj
 
 
 def delete_with_audit(obj, user):

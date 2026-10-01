@@ -238,6 +238,21 @@ def record_gate_decision(event):
         logger.exception('Failed to record gate decision metric')
 
 
+GATE_ALERTS_TOTAL = Counter(
+    'lpr_gate_alerts_total',
+    'Telegram messages for plates on the alert list, by outcome',
+    ['result'],  # sent, failed
+    registry=REGISTRY
+)
+
+
+def record_alert_delivery(result):
+    try:
+        GATE_ALERTS_TOTAL.labels(result=result).inc()
+    except Exception:
+        logger.exception('Failed to record alert metric')
+
+
 def record_gate_command(event, result):
     try:
         GATE_COMMANDS_TOTAL.labels(gate=_gate_label(event.gate), command=event.command, result=result).inc()

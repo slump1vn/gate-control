@@ -61,6 +61,9 @@ urlpatterns = [
     path('api/v1/gate/devices/<int:gate_id>/controller-jobs/', gate_admin_views.api_gate_controller_jobs, name='api_gate_controller_jobs'),
     path('api/v1/gate/devices/<int:gate_id>/test-decide/', gate_admin_views.api_gate_test_decide, name='api_gate_test_decide'),
     path('api/v1/gate/devices/<int:gate_id>/simulator/', gate_admin_views.api_gate_simulator, name='api_gate_simulator'),
+    path('api/v1/gate/plate-alerts/', gate_admin_views.api_plate_alerts, name='api_plate_alerts'),
+    path('api/v1/gate/plate-alerts/test/', gate_admin_views.api_plate_alert_test, name='api_plate_alert_test'),
+    path('api/v1/gate/plate-alerts/<int:alert_id>/', gate_admin_views.api_plate_alert_detail, name='api_plate_alert_detail'),
     path('api/v1/gate/config-changes/', gate_admin_views.api_config_changes, name='api_config_changes'),
 
     # Users (gate_admin)

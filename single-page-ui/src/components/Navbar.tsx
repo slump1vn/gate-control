@@ -30,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/manage/cameras', label: 'nav.cameras', role: 'gate_admin' },
   { href: '/manage/gates', label: 'nav.gates', role: 'gate_admin' },
   { href: '/manage/users', label: 'nav.users', role: 'gate_admin' },
+  { href: '/manage/alerts', label: 'nav.alerts', role: 'gate_admin' },
   { href: '/health', label: 'nav.health', external: true },
 ];
 

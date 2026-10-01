@@ -78,6 +78,26 @@ def serialize_camera(c):
     }
 
 
+def serialize_plate_alert(alert):
+    last = alert.deliveries.order_by('-created_at').first()
+    return {
+        'id': alert.id,
+        'plate_display': alert.plate_display,
+        'plate_normalized': alert.plate_normalized,
+        'label': alert.label,
+        'directions': alert.directions,
+        'chat_ids': alert.chat_ids,
+        'is_active': alert.is_active,
+        'last_notified_at': iso(alert.last_notified_at),
+        'last_delivery': {
+            'status': last.status, 'error': last.error, 'chat_id': last.chat_id, 'at': iso(last.created_at),
+            'event_id': last.event_id,
+        } if last else None,
+        'created_at': iso(alert.created_at),
+        'updated_at': iso(alert.updated_at),
+    }
+
+
 def gate_camera(link):
     camera = link.camera
     return {

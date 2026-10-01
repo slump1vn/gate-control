@@ -234,6 +234,17 @@ GATE_COMMAND_TTL_SECONDS = config('GATE_COMMAND_TTL_SECONDS', default=15, cast=i
 # when a plate was misread; 'all' keeps every frame of every decision.
 GATE_KEEP_FRAMES = config('GATE_KEEP_FRAMES', default='evidence', cast=str)
 
+# Telegram messages when a plate on the alert list (/manage/alerts) passes a gate.
+# Empty token: no messages are sent.
+TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='').strip()
+# Default recipients (chat ids, or @channel names), separated by commas
+TELEGRAM_CHAT_IDS = config('TELEGRAM_CHAT_IDS', default='').strip()
+TELEGRAM_API_URL = config('TELEGRAM_API_URL', default='https://api.telegram.org').strip().rstrip('/')
+# The same plate at the same gate is announced at most once per this many seconds
+TELEGRAM_ALERT_COOLDOWN_SECONDS = config('TELEGRAM_ALERT_COOLDOWN_SECONDS', default=300, cast=int)
+# Attach the evidence frame to the message
+TELEGRAM_SEND_PHOTO = config('TELEGRAM_SEND_PHOTO', default=True, cast=bool)
+
 GATE_EVENT_RETENTION_DAYS = config('GATE_EVENT_RETENTION_DAYS', default=90, cast=int)
 GATE_AUTO_CLOSE = config('GATE_AUTO_CLOSE', default='controller')  # controller | software
 GATE_AUTO_CLOSE_SECONDS = config('GATE_AUTO_CLOSE_SECONDS', default=10, cast=int)
