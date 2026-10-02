@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A gate controller resetting in the middle of its heartbeats (for instance while a flashing tool kept retrying on its USB port) left half-open connections that took every `lpr-app` thread, and no page loaded until a restart. Controller heartbeats now go through the `live-gateway` nginx, which reads each request with short timeouts first; point the controller's heartbeat address at `http://<server>:8002/api/v1/gate/heartbeat/`
+- `lpr-app`'s Docker healthcheck makes a real HTTP request, so a stuck server shows as unhealthy instead of healthy
+
 ### Added
 - **Automatic opening on/off per gate**: *Open automatically* in `/manage/gates` (also a column in the Django admin). Off, the gate keeps reading and logging plates but never opens by itself, neither for registered vehicles nor on approach; the guard's Open button still works. The gate card shows *Automatic opening off*
 - Remote codes are now listened for 10 seconds instead of 6, from the admin UI and from the controller's own page

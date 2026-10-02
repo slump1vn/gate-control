@@ -186,7 +186,7 @@ void page() {
   html += "Gate id (trong /manage/gates)<input name=gate value=\"" + String(c.gate_id) + "\">";
   html += String("Token bộ điều khiển (để trống: giữ nguyên") + (c.secret.length() ? ", đã có" : ", CHƯA CÓ") +
           ")<input name=secret type=password>";
-  html += "Địa chỉ heartbeat<input name=hburl placeholder=http://192.168.2.80:8000/api/v1/gate/heartbeat/ value=\"" +
+  html += "Địa chỉ heartbeat<input name=hburl placeholder=http://192.168.2.80:8002/api/v1/gate/heartbeat/ value=\"" +
           esc(c.heartbeat_url) + "\">";
   html += "Máy chủ NTP<input name=ntp value=\"" + esc(c.ntp_server) + "\">";
   html += "Tần số (MHz)<input name=freq value=\"" + String(c.frequency_mhz, 3) + "\">";

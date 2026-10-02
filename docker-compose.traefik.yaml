@@ -22,6 +22,9 @@ configs:
   # The live-gateway lets through only the player's WebSocket, and only after
   # lpr-app says the viewer may watch that camera. go2rtc's API (which lists
   # every stream with the camera's credentials) is never reachable from outside.
+  # It also relays gate controller heartbeats: nginx reads the whole request, with
+  # short timeouts, before lpr-app sees it, so a controller that resets or drops
+  # off WiFi mid-request cannot hold one of lpr-app's few threads.
   # $$ is a literal $ for nginx: Compose would otherwise substitute it.
   live_gateway_conf:
     content: |
@@ -58,6 +61,19 @@ configs:
           proxy_set_header X-Original-URI $$request_uri;
           # The site's own name, which ALLOWED_HOSTS accepts
           proxy_set_header Host $$http_host;
+        }
+
+        location = /api/v1/gate/heartbeat/ {
+          client_max_body_size 64k;
+          client_body_timeout 10s;
+          send_timeout 10s;
+          set $$lpr http://lpr-app:8000;
+          proxy_pass $$lpr;
+          proxy_set_header Host $$http_host;
+          proxy_set_header X-Forwarded-For $$remote_addr;
+          proxy_connect_timeout 5s;
+          proxy_send_timeout 10s;
+          proxy_read_timeout 15s;
         }
 
         location / {
@@ -197,7 +213,16 @@ services:
       - "${LPR_APP_PORT:-8000}:8000"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "manage.py", "check"]
+      # A real request through gunicorn, so a worker whose threads are all stuck shows
+      # unhealthy; the Host is the first ALLOWED_HOSTS name
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import os, urllib.request as u;
+          h = [x.strip().lstrip('.') for x in os.environ.get('ALLOWED_HOSTS', '').split(',') if x.strip() not in ('', '*')];
+          u.urlopen(u.Request('http://127.0.0.1:8000/api/v1/health-light/', headers={'Host': h[0] if h else 'localhost'}), timeout=8)
       interval: 30s
       timeout: 10s
       retries: 3

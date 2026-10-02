@@ -101,7 +101,8 @@ console: **write it on the device label**. Join it and open `http://192.168.4.1/
 
 1. **Network and gate.** WiFi SSID and password, the gate id and controller
    token from `/manage/gates` (controller type *ESP32 + 433 MHz remote*), and
-   the heartbeat URL, e.g. `http://192.168.2.80:8000/api/v1/gate/heartbeat/`.
+   the heartbeat URL, e.g. `http://192.168.2.80:8002/api/v1/gate/heartbeat/` (through the
+   `live-gateway` nginx, port `LIVE_GATEWAY_PORT`, so a device that drops mid-request cannot hold a server thread).
 2. **Buttons**, one of two ways:
    - **pair** (preferred): put the barrier receiver in LEARN mode (see its
      manual), then press *pair* for that button. The device sends its own code,

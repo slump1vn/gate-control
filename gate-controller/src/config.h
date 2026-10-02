@@ -30,7 +30,7 @@ struct Config {
   uint32_t gate_id = 0;
   // The gate's controller token from /manage/gates: the HMAC key, never sent
   String secret;
-  // Full heartbeat URL, e.g. http://192.168.2.80:8000/api/v1/gate/heartbeat/
+  // Full heartbeat URL, e.g. http://192.168.2.80:8002/api/v1/gate/heartbeat/
   String heartbeat_url;
   String ntp_server = "pool.ntp.org";
   // WPA2 password of the setup-mode access point (printed on the device label)
