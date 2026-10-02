@@ -139,6 +139,7 @@ static void test_capture_commands_are_never_rate_limited() {
   TEST_ASSERT_EQUAL(200, g.admit(Command::Open, 1000).status);
   TEST_ASSERT_EQUAL(200, g.admit(Command::Capture, 1001).status);
   TEST_ASSERT_EQUAL(200, g.admit(Command::SaveCode, 1002).status);
+  TEST_ASSERT_EQUAL(200, g.admit(Command::Update, 1003).status);
   // ...and do not count as motion either
   TEST_ASSERT_EQUAL(429, g.admit(Command::Open, 2000).status);
 }
@@ -160,6 +161,7 @@ static void test_parse_command() {
   TEST_ASSERT_TRUE(parse_command("/close") == Command::Close);
   TEST_ASSERT_TRUE(parse_command("/stop") == Command::Stop);
   TEST_ASSERT_TRUE(parse_command("/status") == Command::Status);
+  TEST_ASSERT_TRUE(parse_command("/update") == Command::Update);
   TEST_ASSERT_TRUE(parse_command("/open/") == Command::Unknown);
 }
 

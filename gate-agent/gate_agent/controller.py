@@ -119,6 +119,13 @@ class ControllerClient:
         """Keep the controller's last capture as `button`'s code."""
         return self._request('capture/save', {'button': button})
 
+    def update(self, firmware, job_id):
+        """Have the controller fetch and install a firmware image. It answers at once;
+        progress and the outcome come back in its heartbeat."""
+        payload = {key: firmware[key] for key in ('path', 'sha256', 'size', 'version')}
+        payload['job'] = job_id
+        return self._request('update', payload)
+
     def status(self):
         url = self.base_url + 'status'
         try:

@@ -429,6 +429,22 @@ class AgentTest(unittest.TestCase):
             8, True, 'saved', {'set': True, 'fingerprint': 'abcd1234', 'bits': 24, 'pulse_us': 350})
         self.assertFalse(self.api.job_result.call_args_list[2].args[1])
 
+    def test_update_job_sends_the_firmware_and_reports(self):
+        self.agent.apply_config(config(gate_config(1)))
+        controller = mock.Mock()
+        controller.update.return_value = {'ok': True, 'result': 'downloading'}
+        self.agent.controllers[1] = controller
+        firmware = {'path': '/api/v1/gate/firmware/download/abc/', 'sha256': 'f' * 64, 'size': 1000000,
+                    'version': 'rf-new'}
+        self.api.agent_jobs.return_value = [
+            {'id': 11, 'gate_id': 1, 'kind': 'update', 'button': '', 'seconds': 0, 'firmware': firmware},
+            {'id': 12, 'gate_id': 1, 'kind': 'update', 'button': '', 'seconds': 0},
+        ]
+        self.assertEqual(self.agent.process_jobs(), 2)
+        controller.update.assert_called_once_with(firmware, 11)
+        self.api.job_result.assert_any_call(11, True, 'downloading', None)
+        self.assertFalse(self.api.job_result.call_args_list[1].args[1])
+
     def test_failed_job_and_failed_poll(self):
         self.agent.apply_config(config(gate_config(1)))
         controller = mock.Mock()

@@ -6,6 +6,7 @@
 #include <sys/time.h>
 
 #include "guard.h"
+#include "ota.h"
 
 namespace net {
 
@@ -89,6 +90,7 @@ void send_heartbeat() {
   hb_status = status;
   hb_at_ms = millis();
   if (status != 200) log_w("Heartbeat: HTTP %d", status);
+  if (status == 200) ota::heartbeat_ok();
 }
 
 void join(bool backup) {

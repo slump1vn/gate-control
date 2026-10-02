@@ -9,12 +9,19 @@ remote button's 433 MHz code, then keep it as that button's code.
     controller heartbeat "capture": {job, state}  -->  done | failed
     nobody picks it up / no result in time  -->  expired / failed
 
+A firmware update (kind 'update') goes the same way: the agent sends the
+controller a signed POST /update with a one-time download path and the
+image's SHA-256; the controller fetches the image from this service, restarts
+into it and reports in its heartbeat "update": downloading, then done once
+the new firmware got a heartbeat through, or failed / rolled_back.
+
 A capture moves nothing, and neither does keeping it, so both run in shadow
 mode too. The code itself never leaves the controller; the service sees only
 fingerprints (first 8 hex of SHA-256 of "<bits>:<code>").
 """
 
 import logging
+import secrets
 from datetime import timedelta
 
 from django.db import transaction
@@ -26,6 +33,12 @@ logger = logging.getLogger(__name__)
 
 # Controllers that can capture: the 433 MHz one, and the simulator standing in for it
 CAPTURE_CONTROLLERS = ('esp32_rf', 'simulator')
+# Controllers running our own firmware, which can update itself over WiFi
+UPDATE_CONTROLLERS = ('esp32_rf',)
+# Download, write, restart and the probation heartbeat, with room to spare
+UPDATE_TIMEOUT_SECONDS = 600
+UPDATE_STATES = ('downloading', 'failed', 'rebooting', 'verifying', 'done', 'rolled_back')
+FINISHED_UPDATE = {'done': 'done', 'failed': 'failed', 'rolled_back': 'failed'}
 BUTTONS = tuple(b for b, _ in ControllerJob.BUTTONS)
 # A job the agent has not taken within this long is not run late
 CLAIM_TTL_SECONDS = 30
@@ -71,6 +84,41 @@ def create(gate, kind, button, user, seconds=10):
         )
 
 
+def _ensure_idle(gate):
+    if ControllerJob.objects.select_for_update().filter(gate=gate, state__in=ControllerJob.ACTIVE_STATES).exists():
+        raise JobRefused('Another job is still running on this controller', 'BUSY')
+
+
+def create_update(gate, firmware, user):
+    """Queue a firmware update of this gate's controller to `firmware` (a ControllerFirmware)."""
+    if gate.controller_type not in UPDATE_CONTROLLERS:
+        raise JobRefused('This controller cannot be updated over WiFi', 'NOT_SUPPORTED')
+    if firmware is None:
+        raise JobRefused('Choose an uploaded firmware', 'INVALID_FIRMWARE')
+    board = (gate.controller_health or {}).get('board')
+    if board and board != firmware.board:
+        raise JobRefused(f'The controller is a {board}; this firmware is for {firmware.board}', 'WRONG_BOARD')
+    if gate.firmware_version == firmware.version:
+        raise JobRefused(f'The controller already runs {firmware.version}', 'SAME_VERSION')
+    expire_stale()
+    with transaction.atomic():
+        _ensure_idle(gate)
+        return ControllerJob.objects.create(
+            gate=gate, kind='update', button='', seconds=0, firmware=firmware, token=secrets.token_hex(16),
+            detail={'version': firmware.version, 'previous_version': gate.firmware_version or None},
+            created_by=user if getattr(user, 'is_authenticated', False) else None,
+        )
+
+
+def download_job(token):
+    """The running update a download link belongs to, or None."""
+    if not token:
+        return None
+    return ControllerJob.objects.filter(
+        token=token, kind='update', state__in=('dispatched', 'running'),
+    ).select_related('firmware').first()
+
+
 def expire_stale(now=None):
     """Jobs nobody took in time never run late; captures that never reported fail."""
     now = now or timezone.now()
@@ -78,17 +126,20 @@ def expire_stale(now=None):
         state='queued', created_at__lt=now - timedelta(seconds=CLAIM_TTL_SECONDS),
     ).update(state='expired', result='not picked up by the agent', updated_at=now)
     for job in ControllerJob.objects.filter(state__in=('dispatched', 'running')):
-        deadline = job.updated_at + timedelta(seconds=job.seconds + RESULT_GRACE_SECONDS)
+        if job.kind == 'update':
+            deadline = job.created_at + timedelta(seconds=UPDATE_TIMEOUT_SECONDS)
+        else:
+            deadline = job.updated_at + timedelta(seconds=job.seconds + RESULT_GRACE_SECONDS)
         if now > deadline:
             ControllerJob.objects.filter(pk=job.pk, state=job.state).update(
-                state='failed', result='no result from the controller', updated_at=now)
+                state='failed', result='no result from the controller', token='', updated_at=now)
 
 
 def claim(now=None):
     """Jobs for the agent, each handed out once."""
     expire_stale(now)
     claimed = []
-    for job in ControllerJob.objects.filter(state='queued').select_related('gate').order_by('created_at'):
+    for job in ControllerJob.objects.filter(state='queued').select_related('gate', 'firmware').order_by('created_at'):
         if ControllerJob.objects.filter(pk=job.pk, state='queued').update(
                 state='dispatched', updated_at=timezone.now()):
             job.state = 'dispatched'
@@ -101,6 +152,10 @@ def record_agent_result(job, sent, result, detail=None):
     result = str(result or '')[:100]
     if not sent:
         job.state, job.result = 'failed', result or 'failed'
+    elif job.kind == 'update':
+        # Downloading now; the outcome comes with the controller's heartbeats
+        if job.state in ('queued', 'dispatched'):
+            job.state, job.result = 'running', result or 'downloading'
     elif job.kind == 'capture':
         # Listening now; the outcome comes with the controller's heartbeat
         if job.state in ('queued', 'dispatched'):
@@ -129,6 +184,45 @@ def apply_capture_report(gate, capture):
     job.result = capture['state']
     job.detail = {k: capture[k] for k in ('fingerprint', 'bits', 'pulse_us', 'frames', 'edges') if k in capture}
     job.save(update_fields=['state', 'result', 'detail', 'updated_at'])
+    return job
+
+
+def apply_update_report(gate, update):
+    """A controller reported on a firmware update: keep its progress, finish its job."""
+    job_id = update.get('job')
+    if not job_id:
+        return None
+    job = ControllerJob.objects.filter(
+        pk=job_id, gate=gate, kind='update', state__in=('dispatched', 'running'),
+    ).first()
+    if job is None:
+        return None
+    state = update['state']
+    detail = dict(job.detail or {}, stage=state)
+    if 'progress' in update:
+        detail['progress'] = update['progress']
+    if state == 'done' and gate.firmware_version != (job.detail or {}).get('version'):
+        # Says done but runs something else: not ours to believe
+        state = 'failed'
+        update = dict(update, error='version_mismatch')
+    outcome = FINISHED_UPDATE.get(state)
+    if outcome:
+        job.state = outcome
+        job.token = ''
+        job.result = state if state != 'failed' else (update.get('error') or 'failed')
+        if state == 'rolled_back':
+            job.result = 'rolled_back'
+    else:
+        job.state = 'running'
+        job.result = state
+    job.detail = detail
+    job.save(update_fields=['state', 'result', 'detail', 'token', 'updated_at'])
+    if outcome == 'done':
+        GateConfigChange.objects.create(
+            user=job.created_by, object_type='gatedevice', object_id=gate.pk, object_repr=str(gate)[:255],
+            action='update',
+            changes={'firmware_version': {'old': detail.get('previous_version'), 'new': detail.get('version')}},
+        )
     return job
 
 
@@ -190,6 +284,20 @@ def clean_heartbeat(body):
                 cap[key] = capture[key]
         _code_fields(capture, cap)
         out['capture'] = cap
+    update = body.get('update')
+    if isinstance(update, dict) and update.get('state') in UPDATE_STATES:
+        upd = {'state': update['state']}
+        if _int(update.get('job')):
+            upd['job'] = update['job']
+        if _int(update.get('progress'), 0, 100):
+            upd['progress'] = update['progress']
+        for key in ('version', 'error'):
+            if isinstance(update.get(key), str):
+                upd[key] = update[key][:64]
+        out['update'] = upd
+    board = body.get('board')
+    if isinstance(board, str) and board.isalnum() and len(board) <= 16:
+        out['board'] = board
     buttons = body.get('buttons')
     if isinstance(buttons, dict):
         clean = {}
@@ -214,6 +322,7 @@ def serialize(job):
         'state': job.state,
         'result': job.result,
         'detail': job.detail or {},
+        'firmware_id': job.firmware_id,
         'created_by': job.created_by.get_username() if job.created_by else None,
         'created_at': job.created_at.isoformat() if job.created_at else None,
         'updated_at': job.updated_at.isoformat() if job.updated_at else None,
@@ -221,4 +330,13 @@ def serialize(job):
 
 
 def agent_view(job):
-    return {'id': job.id, 'gate_id': job.gate_id, 'kind': job.kind, 'button': job.button, 'seconds': job.seconds}
+    view = {'id': job.id, 'gate_id': job.gate_id, 'kind': job.kind, 'button': job.button, 'seconds': job.seconds}
+    if job.kind == 'update' and job.firmware is not None:
+        # A path, not a URL: the controller fetches it from the server its heartbeat goes to
+        view['firmware'] = {
+            'path': f'/api/v1/gate/firmware/download/{job.token}/',
+            'sha256': job.firmware.sha256,
+            'size': job.firmware.size,
+            'version': job.firmware.version,
+        }
+    return view

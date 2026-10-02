@@ -10,6 +10,7 @@ import type { GateDevice, GateDeviceInput } from '@/lib/gate-api';
 import RequireRole from '@/components/RequireRole';
 import GateDeviceForm from '@/components/GateDeviceForm';
 import RemoteCodesPanel from '@/components/RemoteCodesPanel';
+import FirmwarePanel from '@/components/FirmwarePanel';
 import { useI18n } from '@/components/I18nContext';
 import Spinner from '@/components/Spinner';
 import { Alert, Badge, Modal, PageHeader, formatDateTime, primaryButton } from '@/components/ui';
@@ -22,6 +23,7 @@ function GatesContent() {
   const [editing, setEditing] = useState<GateDevice | 'new' | null>(null);
   // The gate whose remote codes are being captured
   const [remoteFor, setRemoteFor] = useState<GateDevice | null>(null);
+  const [firmwareFor, setFirmwareFor] = useState<GateDevice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -144,6 +146,11 @@ function GatesContent() {
                         {t('gates.remoteCodes')}
                       </button>
                     )}
+                    {g.controller_type === 'esp32_rf' && (
+                      <button onClick={() => setFirmwareFor(g)} className="text-purple-600 dark:text-purple-400 hover:underline">
+                        {t('gates.firmware')}
+                      </button>
+                    )}
                     <button onClick={() => setEditing(g)} className="text-purple-600 dark:text-purple-400 hover:underline">{t('common.edit')}</button>
                     <button onClick={() => remove(g)} className="text-red-600 dark:text-red-400 hover:underline">{t('common.delete')}</button>
                   </td>
@@ -166,6 +173,12 @@ function GatesContent() {
       {remoteFor && (
         <Modal title={t('gates.remoteCodesTitle', { name: remoteFor.name })} onClose={() => setRemoteFor(null)}>
           <RemoteCodesPanel gateId={remoteFor.id} simulated={remoteFor.controller_type === 'simulator'} />
+        </Modal>
+      )}
+
+      {firmwareFor && (
+        <Modal title={t('gates.firmwareTitle', { name: firmwareFor.name })} onClose={() => setFirmwareFor(null)}>
+          <FirmwarePanel gateId={firmwareFor.id} />
         </Modal>
       )}
     </div>

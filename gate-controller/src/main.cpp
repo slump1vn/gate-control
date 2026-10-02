@@ -16,6 +16,7 @@
 #include "console.h"
 #include "device.h"
 #include "net.h"
+#include "ota.h"
 #include "pins.h"
 #include "portal.h"
 #include "radio.h"
@@ -136,6 +137,7 @@ void setup() {
   esp_task_wdt_add(nullptr);
 
   config_store::load(device::cfg);
+  ota::begin();
   device::guard.restore_nonce(config_store::load_nonce());
   // The radio comes up idle before anything else can happen
   radio::begin(device::cfg.frequency_mhz, device::cfg.power_dbm);
@@ -154,6 +156,7 @@ void setup() {
   api::begin(server);
   net::start_heartbeat(device::cfg, [](JsonDocument& doc) {
     doc["firmware_version"] = GATE_FW_VERSION;
+    doc["board"] = ota::board();
     doc["uptime_s"] = device::uptime_s();
     doc["rf_tx_count"] = radio::tx_count();
     doc["dry_run"] = device::cfg.dry_run;
@@ -161,6 +164,7 @@ void setup() {
     String last = device::last_result();
     if (last.length()) doc["last_command_result"] = last;
     remote::describe(doc);
+    ota::describe(doc);
   });
 }
 
@@ -172,6 +176,7 @@ void loop() {
   portal::tick();
   if (!setup_mode) {
     net::tick();
+    ota::tick();
     remote::poll();
     const char* confirmed = arm::poll();
     if (confirmed) device::set_last_result(confirmed);

@@ -163,6 +163,25 @@ def api_gate_agent_jobs(request):
     return JsonResponse({'jobs': [controller_jobs.agent_view(j) for j in controller_jobs.claim()]})
 
 
+@require_http_methods(["GET"])
+def api_firmware_download(request, token):
+    """
+    A firmware image for the controller being updated. The one-time token in the
+    path is the only key, and it works only while that update runs; the image
+    holds no secret, and the controller checks its SHA-256 from the signed command.
+    """
+    job = controller_jobs.download_job(token)
+    if job is None or job.firmware is None:
+        return error('Not found', 'NOT_FOUND', status=404)
+    try:
+        handle = job.firmware.file.open('rb')
+    except (FileNotFoundError, ValueError):
+        return error('Firmware file missing', 'FILE_MISSING', status=410)
+    response = FileResponse(handle, content_type='application/octet-stream')
+    response['Content-Length'] = str(job.firmware.size)
+    return response
+
+
 @require_http_methods(["POST"])
 @require_agent_token
 def api_controller_job_result(request, job_id):
@@ -396,6 +415,8 @@ def api_gate_heartbeat(request):
     gate.save(update_fields=fields)
     if 'capture' in health:
         controller_jobs.apply_capture_report(gate, health['capture'])
+    if 'update' in health:
+        controller_jobs.apply_update_report(gate, health['update'])
     # server_ts lets a device without SNTP set its clock (the signature window needs one)
     return JsonResponse({'success': True, 'server_time': iso(gate.last_seen), 'server_ts': time.time()})
 

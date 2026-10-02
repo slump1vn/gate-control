@@ -76,6 +76,20 @@ configs:
           proxy_read_timeout 15s;
         }
 
+        # Firmware images for controllers updating themselves (one-time links);
+        # nginx takes the whole image from lpr-app at once and feeds the
+        # controller at its own pace
+        location ^~ /api/v1/gate/firmware/download/ {
+          limit_except GET { deny all; }
+          set $$lpr http://lpr-app:8000;
+          proxy_pass $$lpr;
+          proxy_set_header Host $$http_host;
+          proxy_set_header X-Forwarded-For $$remote_addr;
+          proxy_connect_timeout 5s;
+          proxy_read_timeout 30s;
+          send_timeout 30s;
+        }
+
         location / {
           return 404;
         }

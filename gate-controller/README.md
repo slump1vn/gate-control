@@ -146,9 +146,31 @@ also on the device page. The backup WiFi always uses DHCP, so a wrong static
 address still leaves a way in. Update the gate's controller address in
 `/manage/gates` to match.
 
-Flashing through a network serial bridge (pyserial's RFC2217 example server)
-cannot drive the auto-reset into download mode in time; hold BOOT while the
-flasher connects.
+Flashing through a network serial bridge: use Espressif's `esp_rfc2217_server`
+(`pip install esptool`, then `esp_rfc2217_server -v -p 2217 COM3` on the PC the
+board is plugged into). It plays the reset sequence on that PC, so esptool's
+auto-reset works and nobody has to hold BOOT. pyserial's example server only
+forwards DTR/RTS over the network, too late for the reset timing. Either one
+resets the board each time a client connects.
+
+## Updating over WiFi
+
+Once a board runs firmware with OTA (this version onwards), it is updated
+from `/manage/gates` → *Firmware*: upload `gate-controller-<board>-app.bin`
+from the CI artifact (not the `-merged.bin`), then **Install**. The agent sends
+the controller a signed `POST /update` with a one-time download path, the
+image's SHA-256, size and version; the controller downloads the image from the
+server its heartbeat goes to (through `live-gateway`), checks the SHA-256,
+writes it to the other app slot and restarts into it, about 30 seconds without
+radio. The new firmware is on probation: it keeps itself only once a heartbeat
+is accepted, within 5 minutes; otherwise, or if it crashes first, the board
+goes back to the previous firmware by itself. Progress and the outcome come
+back in the heartbeat (`update`). Settings, WiFi and remote codes are kept.
+
+The image carries `GATEFW:<version>:<board>:END`, read by the server on
+upload, so a build for another board is never offered. Both app slots are
+1.25 MB (default partition table); a firmware outgrowing that needs a new
+partition table, flashed over USB once.
 
 ## Capturing a remote from the admin UI
 

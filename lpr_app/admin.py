@@ -9,7 +9,7 @@ from django.utils.safestring import mark_safe
 from .models import (
     UploadedImage, ProcessingLog,
     Vehicle, Camera, GateDevice, AccessEvent, GateConfigChange, SimulatedBarrier,
-    GateCamera, PlateAlert, AlertDelivery,
+    GateCamera, PlateAlert, AlertDelivery, ControllerFirmware,
 )
 from .forms import CameraForm, GateDeviceForm
 from .services import barrier_simulator, config_audit, gate_service
@@ -235,6 +235,16 @@ class VehicleAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'vehicle_type', 'department')
     search_fields = ('plate_normalized', 'plate_display', 'owner_name', 'department')
     readonly_fields = ('plate_normalized', 'created_at', 'updated_at')
+
+
+@admin.register(ControllerFirmware)
+class ControllerFirmwareAdmin(admin.ModelAdmin):
+    list_display = ('version', 'board', 'chip', 'size', 'created_at', 'uploaded_by')
+    readonly_fields = ('version', 'board', 'chip', 'size', 'sha256', 'uploaded_by', 'created_at')
+
+    def has_add_permission(self, request):
+        # Uploads go through /manage/gates, which checks the image
+        return False
 
 
 @admin.register(PlateAlert)

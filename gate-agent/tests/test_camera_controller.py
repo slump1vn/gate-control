@@ -372,6 +372,20 @@ class ControllerCaptureTest(unittest.TestCase):
             'tok', 'POST', '/capture/save', kwargs['headers']['X-Gate-Nonce'], kwargs['headers']['X-Gate-Ts'],
             kwargs['data']))
 
+    def test_update_is_a_signed_post_with_only_the_firmware_fields(self):
+        self.session.post.return_value = FakeResponse(202, body={'ok': True, 'result': 'downloading'})
+        firmware = {'path': '/api/v1/gate/firmware/download/abc/', 'sha256': 'a' * 64, 'size': 1074705,
+                    'version': 'rf-new', 'extra': 'ignored'}
+        self.assertEqual(self.client.update(firmware, 31)['result'], 'downloading')
+        args, kwargs = self.session.post.call_args
+        self.assertEqual(args[0], 'http://192.168.2.60/update')
+        self.assertEqual(json.loads(kwargs['data']), {
+            'path': '/api/v1/gate/firmware/download/abc/', 'sha256': 'a' * 64, 'size': 1074705,
+            'version': 'rf-new', 'job': 31})
+        self.assertEqual(kwargs['headers']['X-Gate-Sig'], signing.sign(
+            'tok', 'POST', '/update', kwargs['headers']['X-Gate-Nonce'], kwargs['headers']['X-Gate-Ts'],
+            kwargs['data']))
+
     def test_capture_is_not_rate_limited_like_motion(self):
         self.session.post.return_value = FakeResponse(200, body={'ok': True})
         self.client.send('open')

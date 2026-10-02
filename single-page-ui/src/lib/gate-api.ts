@@ -577,12 +577,18 @@ export interface CaptureReport {
 export interface ControllerJob {
   id: number;
   gate_id: number;
-  kind: 'capture' | 'save_code';
-  button: RemoteButton;
+  kind: 'capture' | 'save_code' | 'update';
+  /** Empty for an update. */
+  button: RemoteButton | '';
   seconds: number;
   state: 'queued' | 'dispatched' | 'running' | 'done' | 'failed' | 'expired';
   result: string;
-  detail: Partial<RemoteCodeInfo> & { frames?: number; edges?: number; previous_fingerprint?: string | null };
+  detail: Partial<RemoteCodeInfo> & {
+    frames?: number; edges?: number; previous_fingerprint?: string | null;
+    /** An update: the target version, the one before, where the controller is and how far the download got. */
+    version?: string; previous_version?: string | null; stage?: string; progress?: number;
+  };
+  firmware_id?: number | null;
   created_by: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -592,6 +598,12 @@ export interface ControllerJobsResponse {
   supported: boolean;
   buttons: Partial<Record<RemoteButton, RemoteCodeInfo>>;
   capture: CaptureReport | null;
+  /** Firmware updates over WiFi (our own 433 MHz firmware only). */
+  update_supported?: boolean;
+  firmware_version?: string | null;
+  /** The board the controller says it is, e.g. esp32dev. */
+  board?: string | null;
+  update?: { state: string; job?: number; progress?: number; version?: string; error?: string } | null;
   jobs: ControllerJob[];
 }
 
@@ -601,6 +613,39 @@ export function getControllerJobs(gateId: number) {
 
 export function queueControllerJob(gateId: number, job: { kind: ControllerJob['kind']; button: RemoteButton; seconds?: number }) {
   return request<ControllerJob>(`/api/v1/gate/devices/${gateId}/controller-jobs/`, { method: 'POST', json: job });
+}
+
+export interface ControllerFirmware {
+  id: number;
+  version: string;
+  board: string;
+  chip: string;
+  size: number;
+  sha256: string;
+  notes: string;
+  uploaded_by: string | null;
+  created_at: string | null;
+}
+
+export function getControllerFirmware() {
+  return request<{ results: ControllerFirmware[] }>('/api/v1/gate/firmware/');
+}
+
+export function uploadControllerFirmware(file: File, notes = '') {
+  const body = new FormData();
+  body.append('file', file);
+  body.append('notes', notes);
+  return request<ControllerFirmware>('/api/v1/gate/firmware/', { method: 'POST', body });
+}
+
+export function deleteControllerFirmware(id: number) {
+  return request<{ success: boolean }>(`/api/v1/gate/firmware/${id}/`, { method: 'DELETE' });
+}
+
+export function queueFirmwareUpdate(gateId: number, firmwareId: number) {
+  return request<ControllerJob>(`/api/v1/gate/devices/${gateId}/controller-jobs/`, {
+    method: 'POST', json: { kind: 'update', firmware_id: firmwareId },
+  });
 }
 
 // ---------------------------------------------------------------- config audit (admin)

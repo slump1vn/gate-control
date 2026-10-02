@@ -22,9 +22,12 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
 from ..forms import CameraForm, GateDeviceForm, PlateAlertForm, UserForm, VehicleForm
-from ..models import AccessEvent, Camera, GateCamera, GateConfigChange, GateDevice, PlateAlert, Vehicle
+from ..models import (
+    AccessEvent, Camera, ControllerFirmware, GateCamera, GateConfigChange, GateDevice, PlateAlert, Vehicle,
+)
 from ..services import (
-    barrier_simulator, camera_service, config_audit, controller_jobs, gate_service, live_stream, plate_alerts,
+    barrier_simulator, camera_service, config_audit, controller_jobs, firmware, gate_service, live_stream,
+    plate_alerts,
 )
 from ..utils.auth import primary_role, require_gate_admin, require_gate_operator
 from ..utils.gate_serializers import (
@@ -329,8 +332,12 @@ def api_gate_controller_jobs(request, gate_id):
         if err:
             return err
         try:
-            job = controller_jobs.create(gate, body.get('kind'), body.get('button'), request.user,
-                                         body.get('seconds', 10))
+            if body.get('kind') == 'update':
+                image = ControllerFirmware.objects.filter(pk=body.get('firmware_id')).first()                     if str(body.get('firmware_id', '')).isdigit() else None
+                job = controller_jobs.create_update(gate, image, request.user)
+            else:
+                job = controller_jobs.create(gate, body.get('kind'), body.get('button'), request.user,
+                                             body.get('seconds', 10))
         except controller_jobs.JobRefused as exc:
             return error(exc.message, exc.code, status=409 if exc.code == 'BUSY' else 400)
         return JsonResponse(controller_jobs.serialize(job), status=201)
@@ -341,8 +348,42 @@ def api_gate_controller_jobs(request, gate_id):
         'supported': gate.controller_type in controller_jobs.CAPTURE_CONTROLLERS,
         'buttons': health.get('buttons') or {},
         'capture': health.get('capture'),
+        'update_supported': gate.controller_type in controller_jobs.UPDATE_CONTROLLERS,
+        'firmware_version': gate.firmware_version or None,
+        'board': health.get('board'),
+        'update': health.get('update'),
         'jobs': [controller_jobs.serialize(j) for j in gate.controller_jobs.select_related('created_by')[:10]],
     })
+
+
+@require_http_methods(["GET", "POST"])
+@require_gate_admin
+def api_controller_firmware(request):
+    """Uploaded gate controller firmware (admins). POST multipart: file (the -app.bin), notes."""
+    if request.method == 'POST':
+        uploaded = request.FILES.get('file')
+        if uploaded is None:
+            return error('Choose a firmware file', 'NO_FILE')
+        try:
+            image = firmware.create_from_upload(uploaded, request.user, request.POST.get('notes', ''))
+        except firmware.FirmwareRefused as exc:
+            return error(exc.message, exc.code)
+        return JsonResponse(firmware.serialize(image), status=201)
+    images = ControllerFirmware.objects.select_related('uploaded_by')[:50]
+    return JsonResponse({'results': [firmware.serialize(f) for f in images]})
+
+
+@require_http_methods(["DELETE"])
+@require_gate_admin
+def api_controller_firmware_detail(request, firmware_id):
+    image = ControllerFirmware.objects.filter(pk=firmware_id).first()
+    if image is None:
+        return error('Firmware not found', 'NOT_FOUND', status=404)
+    if image.jobs.filter(state__in=('queued', 'dispatched', 'running')).exists():
+        return error('An update to this firmware is running', 'IN_USE', status=409)
+    image.file.delete(save=False)
+    image.delete()
+    return JsonResponse({'success': True})
 
 
 @require_http_methods(["GET", "PUT", "PATCH", "DELETE"])

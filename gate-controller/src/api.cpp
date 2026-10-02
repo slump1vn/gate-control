@@ -6,6 +6,7 @@
 #include "config.h"
 #include "device.h"
 #include "net.h"
+#include "ota.h"
 #include "radio.h"
 #include "remote.h"
 
@@ -36,6 +37,7 @@ void add_state(JsonDocument& doc) {
   doc["clock_synced"] = net::clock_synced();
   doc["transport"] = "rf433";
   doc["firmware_version"] = GATE_FW_VERSION;
+  doc["board"] = ota::board();
   doc["stop_supported"] = device::cfg.buttons[BUTTON_STOP].set;
   doc["rf_tx_count"] = radio::tx_count();
   doc["uptime_s"] = device::uptime_s();
@@ -86,6 +88,31 @@ void handle_save(const gatecore::Request& req) {
   reply(200, doc);
 }
 
+// POST /update {"path": "/api/v1/gate/firmware/download/<token>/", "sha256": "...",
+//               "size": 1071376, "version": "rf-abc", "job": 12}
+// The image comes from the server the heartbeat goes to; answer at once,
+// progress and outcome come back in the heartbeat.
+void handle_update(const gatecore::Request& req) {
+  JsonDocument body;
+  if (deserializeJson(body, req.body)) return refuse(400, "bad_request");
+  String path = body["path"] | "";
+  if (!path.startsWith("/")) return refuse(400, "bad_path");
+  const String& hb = device::cfg.heartbeat_url;
+  int host_end = hb.indexOf('/', hb.indexOf("//") + 2);
+  String url = (host_end > 0 ? hb.substring(0, host_end) : hb) + path;
+  const char* error = "";
+  if (!ota::start(url, body["sha256"] | "", body["size"] | 0u, body["version"] | "", body["job"] | 0u,
+                  &error)) {
+    return refuse(409, error);
+  }
+  device::set_last_result(String("update: ") + (body["version"] | ""));
+  JsonDocument doc;
+  doc["ok"] = true;
+  doc["command"] = "update";
+  doc["result"] = "downloading";
+  reply(202, doc);
+}
+
 Button button_for(Command cmd) {
   switch (cmd) {
     case Command::Open: return BUTTON_UP;
@@ -122,6 +149,7 @@ void handle() {
   }
   if (cmd == Command::Capture) return handle_capture(req);
   if (cmd == Command::SaveCode) return handle_save(req);
+  if (cmd == Command::Update) return handle_update(req);
 
   Button button = button_for(cmd);
   if (!device::cfg.buttons[button].set) {

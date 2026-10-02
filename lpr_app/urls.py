@@ -32,6 +32,7 @@ urlpatterns = [
     path('api/v1/gate/agent-commands/', gate_views.api_gate_agent_commands, name='api_gate_agent_commands'),
     path('api/v1/gate/approach/', gate_views.api_gate_approach, name='api_gate_approach'),
     path('api/v1/gate/agent-jobs/', gate_views.api_gate_agent_jobs, name='api_gate_agent_jobs'),
+    path('api/v1/gate/firmware/download/<str:token>/', gate_views.api_firmware_download, name='api_firmware_download'),
     path('api/v1/gate/controller-jobs/<int:job_id>/result/', gate_views.api_controller_job_result, name='api_controller_job_result'),
     path('api/v1/gate/events/<int:event_id>/command-result/', gate_views.api_gate_command_result, name='api_gate_command_result'),
     path('api/v1/gate/heartbeat/', gate_views.api_gate_heartbeat, name='api_gate_heartbeat'),
@@ -64,6 +65,8 @@ urlpatterns = [
     path('api/v1/gate/plate-alerts/', gate_admin_views.api_plate_alerts, name='api_plate_alerts'),
     path('api/v1/gate/plate-alerts/test/', gate_admin_views.api_plate_alert_test, name='api_plate_alert_test'),
     path('api/v1/gate/plate-alerts/<int:alert_id>/', gate_admin_views.api_plate_alert_detail, name='api_plate_alert_detail'),
+    path('api/v1/gate/firmware/', gate_admin_views.api_controller_firmware, name='api_controller_firmware'),
+    path('api/v1/gate/firmware/<int:firmware_id>/', gate_admin_views.api_controller_firmware_detail, name='api_controller_firmware_detail'),
     path('api/v1/gate/config-changes/', gate_admin_views.api_config_changes, name='api_config_changes'),
 
     # Users (gate_admin)

@@ -11,6 +11,7 @@ Command parse_command(const std::string& path) {
   if (path == "/status") return Command::Status;
   if (path == "/capture") return Command::Capture;
   if (path == "/capture/save") return Command::SaveCode;
+  if (path == "/update") return Command::Update;
   return Command::Unknown;
 }
 
@@ -22,6 +23,7 @@ const char* command_name(Command c) {
     case Command::Status: return "status";
     case Command::Capture: return "capture";
     case Command::SaveCode: return "save_code";
+    case Command::Update: return "update";
     default: return "unknown";
   }
 }
@@ -85,7 +87,8 @@ Verdict Guard::authenticate(const std::string& secret, const Request& req, bool 
 }
 
 Verdict Guard::admit(Command cmd, uint32_t now_ms) {
-  if (cmd == Command::Stop || cmd == Command::Status || cmd == Command::Capture || cmd == Command::SaveCode) {
+  if (cmd == Command::Stop || cmd == Command::Status || cmd == Command::Capture || cmd == Command::SaveCode ||
+      cmd == Command::Update) {
     return {200, ""};
   }
   if (cmd != Command::Open && cmd != Command::Close) return {404, "unknown_command"};

@@ -404,6 +404,11 @@ def run_job(api, controller, job):
             body = controller.save_code(button)
             # Only the fingerprint of the kept code, never the code
             detail = (body.get('buttons') or {}).get(button)
+        elif kind == 'update':
+            if not isinstance(job.get('firmware'), dict):
+                raise ControllerError('Update job without firmware')
+            body = controller.update(job['firmware'], job['id'])
+            detail = None
         else:
             raise ControllerError(f'Unknown job {kind!r}')
         logger.info('Job %s: %s %s: %s', job['id'], kind, button, body.get('result'))
@@ -530,7 +535,7 @@ class Agent:
         return len(commands)
 
     def process_jobs(self):
-        """Installer jobs from the admin UI: capture a remote button, keep its code."""
+        """Installer jobs from the admin UI: capture a remote button, keep its code, update the firmware."""
         try:
             jobs = self.api.agent_jobs()
         except Exception as exc:

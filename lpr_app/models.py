@@ -781,6 +781,7 @@ class ControllerJob(models.Model):
     KINDS = [
         ('capture', 'Capture a remote button'),
         ('save_code', 'Keep the captured code'),
+        ('update', 'Update the firmware'),
     ]
     BUTTONS = [
         ('up', 'UP'),
@@ -799,7 +800,13 @@ class ControllerJob(models.Model):
 
     gate = models.ForeignKey(GateDevice, on_delete=models.CASCADE, related_name='controller_jobs')
     kind = models.CharField(max_length=10, choices=KINDS)
-    button = models.CharField(max_length=5, choices=BUTTONS)
+    button = models.CharField(max_length=5, choices=BUTTONS, blank=True)
+    firmware = models.ForeignKey(
+        'ControllerFirmware', null=True, blank=True, on_delete=models.SET_NULL, related_name='jobs',
+    )
+    # An update's download link: the controller fetches /api/v1/gate/firmware/download/<token>/
+    # while the job is running, and only then
+    token = models.CharField(max_length=32, blank=True, db_index=True)
     seconds = models.PositiveSmallIntegerField(
         default=6, validators=[MinValueValidator(2), MaxValueValidator(15)],
         help_text='How long a capture listens.',
@@ -821,6 +828,34 @@ class ControllerJob(models.Model):
 
     def __str__(self):
         return f"{self.gate} {self.kind} {self.button} {self.state}"
+
+
+def firmware_upload_path(instance, filename):
+    return f'firmware/{filename}'
+
+
+class ControllerFirmware(models.Model):
+    """A gate controller firmware image (the -app.bin CI builds), for updates over WiFi."""
+
+    file = models.FileField(upload_to=firmware_upload_path)
+    version = models.CharField(max_length=64)
+    board = models.CharField(max_length=16)
+    chip = models.CharField(max_length=16)
+    size = models.PositiveIntegerField()
+    sha256 = models.CharField(max_length=64, unique=True)
+    notes = models.CharField(max_length=200, blank=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Controller Firmware'
+        verbose_name_plural = 'Controller Firmware'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.version} ({self.board})'
 
 
 class GateConfigChange(models.Model):
