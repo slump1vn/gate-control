@@ -153,6 +153,16 @@ auto-reset works and nobody has to hold BOOT. pyserial's example server only
 forwards DTR/RTS over the network, too late for the reset timing. Either one
 resets the board each time a client connects.
 
+## How a command is sent
+
+Each command is sent like a press of the remote: 15 ms of silence (the
+transmitter settles), then the frames as an EV1527 remote sends them, sync
+first, then a closing sync and silence again, so the receiver hears the press
+end and takes the next command as a new press. *Frames per command* (1-30) and
+*pulse width* (0 = as captured, or 150-800 µs for a receiver that wants the
+remote's exact timing) are on the device page; a press never runs past 1.5 s,
+so fewer frames are sent when they would not fit.
+
 ## Updating over WiFi
 
 Once a board runs firmware with OTA (this version onwards), it is updated

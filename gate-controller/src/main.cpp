@@ -95,7 +95,14 @@ bool transmit_button(Button b) {
   const ButtonCode& code = cfg.buttons[b];
   if (!code.set || !radio::ready()) return false;
   led_show(LED_TX);
-  bool ok = radio::transmit(gatecore::encode_burst(code.code, code.profile, cfg.repeats));
+  gatecore::RfProfile profile = code.profile;
+  if (cfg.pulse_us) profile.pulse_us = cfg.pulse_us;
+  // As many frames as asked for, as long as the press stays within MAX_TX_MS
+  const uint32_t gap_us = 15000;
+  uint32_t frame_us = gatecore::duration_us(gatecore::encode_frame(code.code, profile));
+  uint32_t budget_us = radio::MAX_TX_MS * 1000 - 2 * gap_us - frame_us;
+  int repeats = min(int(cfg.repeats), int(budget_us / frame_us));
+  bool ok = radio::transmit(gatecore::encode_press(code.code, profile, repeats, gap_us));
   led_show(LED_OFF);
   return ok;
 }

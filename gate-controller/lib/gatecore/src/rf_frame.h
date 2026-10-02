@@ -36,6 +36,13 @@ std::vector<Pulse> encode_frame(uint32_t code, const RfProfile& profile);
 // `repeats` frames back to back
 std::vector<Pulse> encode_burst(uint32_t code, const RfProfile& profile, int repeats);
 
+// What the radio sends for one command, shaped like a press of the remote: a
+// silence (`gap_us`, also time for the transmitter to settle), then `repeats`
+// times sync + data bits, as an EV1527 remote sends them, then a closing sync
+// and the silence again. Every frame sits between two syncs, and the receiver
+// hears the press end, so the next command counts as a new press.
+std::vector<Pulse> encode_press(uint32_t code, const RfProfile& profile, int repeats, uint32_t gap_us);
+
 // Total duration of a pulse train
 uint32_t duration_us(const std::vector<Pulse>& pulses);
 

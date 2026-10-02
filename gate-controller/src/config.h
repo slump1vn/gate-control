@@ -39,6 +39,9 @@ struct Config {
   float frequency_mhz = 433.92f;
   int8_t power_dbm = 10;  // capped at +10 dBm whatever is stored
   uint8_t repeats = 10;   // frames per command, about 0.45 s at 350 us
+  // Pulse width sent instead of the captured one, for a receiver fussier than
+  // the capture's measurement; 0 = as captured
+  uint16_t pulse_us = 0;
   uint32_t ev1527_address = 0;  // this device's own 20-bit remote identity; 0 = not generated yet
   ButtonCode buttons[BUTTON_COUNT];
 

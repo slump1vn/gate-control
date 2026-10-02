@@ -49,6 +49,23 @@ std::vector<Pulse> encode_burst(uint32_t code, const RfProfile& p, int repeats) 
   return out;
 }
 
+std::vector<Pulse> encode_press(uint32_t code, const RfProfile& p, int repeats, uint32_t gap_us) {
+  std::vector<Pulse> out;
+  if (repeats <= 0) return out;
+  std::vector<Pulse> frame = encode_frame(code, p);
+  out.reserve(frame.size() * size_t(repeats) + 3);
+  push(out, false, gap_us);
+  for (int r = 0; r < repeats; ++r) {
+    // The frame's own sync goes first, then its bits
+    push(out, frame[frame.size() - 2].high, frame[frame.size() - 2].us);
+    push(out, frame.back().high, frame.back().us);
+    for (size_t i = 0; i + 2 < frame.size(); ++i) push(out, frame[i].high, frame[i].us);
+  }
+  push(out, true, p.sync_high * p.pulse_us);
+  push(out, false, p.sync_low * p.pulse_us + gap_us);
+  return out;
+}
+
 uint32_t duration_us(const std::vector<Pulse>& pulses) {
   uint32_t total = 0;
   for (const auto& p : pulses) total += p.us;

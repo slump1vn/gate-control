@@ -198,6 +198,32 @@ static void test_burst_repeats_frames_back_to_back() {
   TEST_ASSERT_EQUAL(0, encode_burst(1, p, 0).size());
 }
 
+static void test_press_is_sync_first_and_closed_by_silence() {
+  RfProfile p;
+  std::vector<Pulse> press = encode_press(0xABCDE1, p, 5, 15000);
+  // Silence, then the sync of the first frame
+  TEST_ASSERT_FALSE(press[0].high);
+  TEST_ASSERT_EQUAL_UINT32(15000, press[0].us);
+  TEST_ASSERT_TRUE(press[1].high);
+  TEST_ASSERT_EQUAL_UINT32(350, press[1].us);
+  TEST_ASSERT_EQUAL_UINT32(10850, press[2].us);
+  // The first data bit (a one): HIGH 3T
+  TEST_ASSERT_EQUAL_UINT32(1050, press[3].us);
+  // Ends with a closing sync and the silence
+  TEST_ASSERT_FALSE(press.back().high);
+  TEST_ASSERT_EQUAL_UINT32(10850 + 15000, press.back().us);
+  TEST_ASSERT_EQUAL_UINT32(15000 + 5 * 128 * 350 + 32 * 350 + 15000, duration_us(press));
+  for (size_t i = 1; i < press.size(); ++i) TEST_ASSERT_TRUE(press[i].high != press[i - 1].high);
+  // Every frame lies between two syncs: all five decode
+  std::vector<uint32_t> d;
+  for (const auto& pulse : press) d.push_back(pulse.us);
+  d.erase(d.begin());  // a receiver's capture starts at the first HIGH
+  std::vector<Decoded> frames = decode_all(d);
+  TEST_ASSERT_EQUAL(5, frames.size());
+  TEST_ASSERT_EQUAL_HEX32(0xABCDE1, frames[4].code);
+  TEST_ASSERT_EQUAL(0, encode_press(1, p, 0, 15000).size());
+}
+
 static void test_ev1527_code_layout() {
   TEST_ASSERT_EQUAL_HEX32(0x12345A, ev1527_code(0x12345, 0xA));
   TEST_ASSERT_EQUAL_HEX32(0xFFFFF1, ev1527_code(0xFFFFFFF, 0x11));  // excess bits masked
@@ -285,6 +311,7 @@ int main(int, char**) {
   RUN_TEST(test_capture_commands_are_never_rate_limited);
   RUN_TEST(test_code_fingerprint);
   RUN_TEST(test_protocol1_frame_matches_rcswitch);
+  RUN_TEST(test_press_is_sync_first_and_closed_by_silence);
   RUN_TEST(test_burst_repeats_frames_back_to_back);
   RUN_TEST(test_ev1527_code_layout);
   RUN_TEST(test_decode_roundtrip_with_leading_noise_and_jitter);

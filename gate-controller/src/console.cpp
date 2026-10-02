@@ -32,6 +32,8 @@ void show() {
   doc["hburl"] = c.heartbeat_url;
   doc["ntp"] = c.ntp_server;
   doc["dry_run"] = c.dry_run;
+  doc["repeats"] = c.repeats;
+  doc["pulse_us"] = c.pulse_us;
   doc["provisioned"] = c.provisioned();
   String out;
   serializeJson(doc, out);

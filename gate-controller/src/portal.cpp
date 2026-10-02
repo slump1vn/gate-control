@@ -191,6 +191,8 @@ void page() {
   html += "Máy chủ NTP<input name=ntp value=\"" + esc(c.ntp_server) + "\">";
   html += "Tần số (MHz)<input name=freq value=\"" + String(c.frequency_mhz, 3) + "\">";
   html += "Số khung mỗi lệnh<input name=repeats value=\"" + String(c.repeats) + "\">";
+  html += "Độ dài xung khi phát (µs, 150-800; 0: theo mã đã thu)<input name=pulseus value=\"" +
+          String(c.pulse_us) + "\">";
   html += F("Mật khẩu cài đặt mới: WiFi riêng của thiết bị và đăng nhập trang này, 8-63 ký tự "
             "(để trống: giữ nguyên)<input name=setuppw type=password minlength=8 maxlength=63>");
   html += F("<button>Lưu</button></form><p>Mạng và token có hiệu lực sau khi khởi động lại.</p>");
@@ -237,6 +239,10 @@ void save() {
   if (freq >= 433.05f && freq <= 434.79f) c.frequency_mhz = freq;
   long repeats = srv->arg("repeats").toInt();
   if (repeats >= 1 && repeats <= 30) c.repeats = uint8_t(repeats);
+  if (srv->hasArg("pulseus")) {
+    long pulse = srv->arg("pulseus").toInt();
+    if (pulse == 0 || (pulse >= 150 && pulse <= 800)) c.pulse_us = uint16_t(pulse);
+  }
   String setuppw = srv->arg("setuppw");
   if (setuppw.length() && (setuppw.length() < 8 || setuppw.length() > 63)) {
     return back("Mật khẩu cài đặt phải dài 8 đến 63 ký tự; chưa lưu gì.");

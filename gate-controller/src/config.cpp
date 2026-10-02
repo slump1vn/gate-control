@@ -55,12 +55,14 @@ bool load(Config& cfg) {
   cfg.frequency_mhz = p.getFloat("freq", 433.92f);
   cfg.power_dbm = p.getChar("power", 10);
   cfg.repeats = p.getUChar("repeats", 10);
+  cfg.pulse_us = p.getUShort("pulseus", 0);
   cfg.ev1527_address = p.getULong("addr", 0);
   cfg.dry_run = p.getBool("dryrun", true);
   for (int b = 0; b < BUTTON_COUNT; ++b) load_button(p, Button(b), cfg.buttons[b]);
   p.end();
   if (cfg.power_dbm > 10) cfg.power_dbm = 10;
   if (cfg.repeats < 1 || cfg.repeats > 30) cfg.repeats = 10;
+  if (cfg.pulse_us && (cfg.pulse_us < 150 || cfg.pulse_us > 800)) cfg.pulse_us = 0;
   return true;
 }
 
@@ -83,6 +85,7 @@ void save(const Config& cfg) {
   p.putFloat("freq", cfg.frequency_mhz);
   p.putChar("power", cfg.power_dbm > 10 ? 10 : cfg.power_dbm);
   p.putUChar("repeats", cfg.repeats);
+  p.putUShort("pulseus", cfg.pulse_us);
   p.putULong("addr", cfg.ev1527_address);
   p.putBool("dryrun", cfg.dry_run);
   for (int b = 0; b < BUTTON_COUNT; ++b) save_button(p, Button(b), cfg.buttons[b]);
