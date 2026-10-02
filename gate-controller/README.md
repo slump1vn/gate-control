@@ -193,7 +193,7 @@ history records which fingerprint replaced which.
   signed with `X-Gate-Nonce`, `X-Gate-Ts` and `X-Gate-Sig`. The token itself is
   never sent. The gate agent does this. There is nothing to call by hand.
 - Refusals: `401` bad signature or stale timestamp, `409` replayed nonce or
-  UP/DOWN interlock, `429` another motion command within 3 s (STOP is exempt),
+  UP/DOWN interlock (the opposite command within 1 s), `429` the same motion command again within 3 s (STOP is exempt),
   `501` no code stored for that button, `503` clock not synced.
 - Results: `sent` (radio is one-way: unconfirmed), `dry_run`.
 - Heartbeat every 10 s to the LPR service: firmware, uptime, WiFi signal,

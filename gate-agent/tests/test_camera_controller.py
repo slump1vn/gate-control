@@ -264,13 +264,19 @@ class ControllerTest(unittest.TestCase):
     def test_local_rate_limit_but_stop_always_allowed(self):
         self.session.post.return_value = FakeResponse(200, body={'ok': True})
         self.client.send('open')
-        self.now[0] += 1
+        self.now[0] += 0.5
         with self.assertRaises(ControllerError) as ctx:
             self.client.send('close')
+        self.assertEqual(ctx.exception.status, 409)
+        self.now[0] += 0.5
+        with self.assertRaises(ControllerError) as ctx:
+            self.client.send('open')
         self.assertEqual(ctx.exception.status, 429)
         self.client.send('stop')
-        self.now[0] += 3
+        # Closing right after opening (past the interlock) goes through
+        self.now[0] += 0.5
         self.client.send('close')
+        self.assertEqual(self.session.post.call_count, 3)
 
     def test_refused_command_does_not_start_rate_limit(self):
         self.session.post.side_effect = [FakeResponse(409, body={'error': 'UP/DOWN interlock'}),

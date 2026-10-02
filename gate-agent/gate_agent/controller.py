@@ -5,7 +5,9 @@ the same contract: POST {base}/open|close|stop and GET {base}/status, each
 signed with the controller token (contract v2, see signing.py) so the token
 itself never crosses the network.
 
-The local rate limit is a second line of defence behind the firmware's own.
+The local limits are a second line of defence behind the firmware's own: the
+same motion command at most once per min_interval, the opposite one only after
+the interlock, so a guard can close right after opening.
 """
 
 import json
@@ -18,6 +20,7 @@ import requests
 from . import signing
 
 MOTION_COMMANDS = ('open', 'close')
+INTERLOCK_SECONDS = 1.0
 
 
 class ControllerError(Exception):
@@ -39,6 +42,7 @@ class ControllerClient:
         self.wall_clock = wall_clock
         self._last_nonce = 0
         self._last_motion_at = None
+        self._last_motion = None
         self._lock = threading.Lock()
 
     def _nonce(self):
@@ -63,9 +67,12 @@ class ControllerClient:
             raise ControllerError(f'Unknown command {command!r}')
         with self._lock:
             now = self.clock()
-            if command in MOTION_COMMANDS and self._last_motion_at is not None \
-                    and now - self._last_motion_at < self.min_interval:
-                raise ControllerError('Local rate limit: motion command too soon', 429)
+            if command in MOTION_COMMANDS and self._last_motion_at is not None:
+                since = now - self._last_motion_at
+                if command == self._last_motion and since < self.min_interval:
+                    raise ControllerError('Local rate limit: the same command again too soon', 429)
+                if command != self._last_motion and since < INTERLOCK_SECONDS:
+                    raise ControllerError('Local interlock: the opposite command too soon', 409)
             response = None
             for attempt in range(2):
                 try:
@@ -76,6 +83,7 @@ class ControllerClient:
                         raise ControllerError(f'Controller unreachable: {exc.__class__.__name__}')
             if command in MOTION_COMMANDS and response.status_code < 400:
                 self._last_motion_at = now
+                self._last_motion = command
         if response.status_code >= 400:
             try:
                 message = response.json().get('error', response.text)

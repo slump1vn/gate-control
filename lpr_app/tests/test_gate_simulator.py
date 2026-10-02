@@ -104,10 +104,12 @@ class SimulatorStateMachineTest(TestCase):
             self.run_cmd('close', self.t0 + timedelta(seconds=0.5))
         self.assertEqual(ctx.exception.status, 409)
         with self.assertRaises(CommandRejected) as ctx:
-            self.run_cmd('close', self.t0 + timedelta(seconds=2))
+            self.run_cmd('open', self.t0 + timedelta(seconds=2))
         self.assertEqual(ctx.exception.status, 429)
         # STOP is never rate limited
         self.assertEqual(self.run_cmd('stop', self.t0 + timedelta(seconds=0.6))['command'], 'stop')
+        # Closing right after opening needs only the interlock
+        self.assertEqual(self.run_cmd('close', self.t0 + timedelta(seconds=1.5))['command'], 'close')
 
     def test_bad_input(self):
         with self.assertRaises(CommandRejected) as ctx:

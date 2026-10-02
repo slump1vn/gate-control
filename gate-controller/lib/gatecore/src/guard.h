@@ -19,7 +19,9 @@ const char* command_name(Command c);
 
 struct Limits {
   uint32_t interlock_ms = 1000;          // open <-> close within this is refused
-  uint32_t min_command_interval_ms = 3000;  // one motion command per this; stop exempt
+  // The same motion command again within this is refused (a double press); the
+  // opposite one only needs the interlock, so a guard can close right after opening
+  uint32_t min_command_interval_ms = 3000;  // stop exempt
   uint32_t ts_window_s = 30;             // |device time - ts| must be within this
 };
 

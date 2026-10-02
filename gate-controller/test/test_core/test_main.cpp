@@ -120,10 +120,12 @@ static void test_interlock_rate_limit_and_stop_exempt() {
   TEST_ASSERT_EQUAL(200, g.admit(Command::Open, 10000).status);
   TEST_ASSERT_EQUAL(409, g.admit(Command::Close, 10500).status);  // opposite within 1 s
   TEST_ASSERT_EQUAL(429, g.admit(Command::Open, 11000).status);   // same within 3 s
-  TEST_ASSERT_EQUAL(429, g.admit(Command::Close, 12000).status);  // opposite after 1 s, before 3 s
   TEST_ASSERT_EQUAL(200, g.admit(Command::Stop, 10100).status);   // never limited
   TEST_ASSERT_EQUAL(200, g.admit(Command::Stop, 10101).status);
-  TEST_ASSERT_EQUAL(200, g.admit(Command::Close, 13000).status);
+  TEST_ASSERT_EQUAL(200, g.admit(Command::Close, 11500).status);  // opposite after 1 s: close right after opening
+  TEST_ASSERT_EQUAL(409, g.admit(Command::Open, 12000).status);   // and back again within 1 s
+  TEST_ASSERT_EQUAL(429, g.admit(Command::Close, 13000).status);  // the same close again within 3 s
+  TEST_ASSERT_EQUAL(200, g.admit(Command::Open, 13000).status);
   TEST_ASSERT_EQUAL(404, g.admit(Command::Unknown, 20000).status);
 }
 

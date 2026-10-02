@@ -95,7 +95,7 @@ Verdict Guard::admit(Command cmd, uint32_t now_ms) {
   if (any_motion_) {
     uint32_t since = now_ms - last_motion_ms_;  // wraps correctly across millis() overflow
     if (cmd != last_motion_ && since < limits_.interlock_ms) return {409, "interlock"};
-    if (since < limits_.min_command_interval_ms) return {429, "rate_limited"};
+    if (cmd == last_motion_ && since < limits_.min_command_interval_ms) return {429, "rate_limited"};
   }
   any_motion_ = true;
   last_motion_ = cmd;

@@ -5,7 +5,7 @@ Implements the ESP32 controller contract (design.md §6) against a virtual arm,
 so recognition, decisions, the agent and the command path can be tested end to
 end before any hardware is wired. It enforces the same rules the firmware must:
 bearer token (checked by the view), strictly increasing nonce, timestamp within
-±30 s, UP/DOWN interlock, one motion command per 3 s (STOP exempt).
+±30 s, UP/DOWN interlock (1 s), the same motion command at most once per 3 s (STOP exempt).
 
 Arm motion is derived from timestamps and advanced whenever the state is read,
 including the controller's auto-close timer (auto_close_seconds, like the
@@ -171,7 +171,7 @@ def execute(gate, command, nonce, ts, now=None):
             since = (now - sim.last_motion_command_at).total_seconds()
             if sim.last_motion_command == OPPOSITE[command] and since < INTERLOCK_SECONDS:
                 raise CommandRejected(409, 'UP/DOWN interlock')
-            if since < MIN_COMMAND_INTERVAL_SECONDS:
+            if sim.last_motion_command == command and since < MIN_COMMAND_INTERVAL_SECONDS:
                 raise CommandRejected(429, 'Motion commands are rate limited')
 
         pos = position(sim, now)
