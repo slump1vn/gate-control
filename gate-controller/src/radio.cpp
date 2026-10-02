@@ -2,6 +2,7 @@
 
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <driver/rmt.h>
+#include <esp_task_wdt.h>
 #include <soc/gpio_reg.h>
 #include <soc/soc_caps.h>
 
@@ -174,6 +175,8 @@ std::vector<uint32_t> capture(uint32_t ms) {
   if (!start_capture(ms)) return {};
   int strongest = -200;
   while (!capture_finished()) {
+    // A blocking capture may outlast the 10 s task watchdog
+    esp_task_wdt_reset();
     delay(10);
     int rssi = ELECHOUSE_cc1101.getRssi();
     if (rssi > strongest) strongest = rssi;

@@ -16,7 +16,7 @@ namespace {
 
 // Setup mode ends after this long without anyone using the page
 const uint32_t IDLE_TIMEOUT_MS = 10UL * 60 * 1000;
-const uint32_t LISTEN_MS = 6000;
+const uint32_t LISTEN_MS = 10000;
 // Pairing: bursts sent while the receiver is in LEARN mode (about 3 s)
 const int PAIR_BURSTS = 6;
 // EV1527 button bits: a 4-button remote's A, B, C
@@ -152,9 +152,9 @@ void page() {
   }
   html += diagnostics();
 
-  html += F("<h2>Đọc tín hiệu remote</h2><p>Bấm <b>Nghe</b> rồi giữ một nút của remote gần thiết bị trong 6 giây. "
+  html += F("<h2>Đọc tín hiệu remote</h2><p>Bấm <b>Nghe</b> rồi giữ một nút của remote gần thiết bị trong 10 giây. "
             "Thiết bị cho biết có bắt được sóng không, mạnh cỡ nào và giải mã được gì. Chỉ đọc, không lưu gì.</p>");
-  html += form_button("/listen", "Nghe 6 giây");
+  html += form_button("/listen", "Nghe 10 giây");
 
   html += F("<h2>Thử điều khiển cổng</h2><p>Phát mã đã lưu <b>ngay</b>, kể cả khi đang chạy thử. "
             "Vẫn chịu khoá liên động LÊN/XUỐNG và giới hạn 1 lệnh/3 giây.</p>");
@@ -163,7 +163,7 @@ void page() {
   html += form_button("/test", "Dừng", "stop");
 
   html += F("<h2>Mã remote đã lưu</h2><p><b>Ghép</b>: bật chế độ LEARN trên bộ thu của barie trước, thiết bị sẽ "
-            "phát mã riêng của nó. <b>Chép</b>: giữ nút tương ứng của remote gần thiết bị trong 6 giây. "
+            "phát mã riêng của nó. <b>Chép</b>: giữ nút tương ứng của remote gần thiết bị trong 10 giây. "
             "Chỉ hiện dấu vân tay của mã.</p><table>");
   for (int b = 0; b < BUTTON_COUNT; ++b) {
     String name = button_name(Button(b));
@@ -255,7 +255,7 @@ void listen() {
   int rssi = radio::last_capture_rssi();
   std::vector<gatecore::Decoded> frames = gatecore::decode_all(edges);
   gatecore::Decoded got = gatecore::decode_confirmed(edges);
-  String msg = "Nghe 6 giây: " + String(edges.size()) + " sườn xung, " + String(frames.size()) +
+  String msg = "Nghe 10 giây: " + String(edges.size()) + " sườn xung, " + String(frames.size()) +
                " khung giải mã được, sóng mạnh nhất " + (rssi ? String(rssi) + " dBm" : String("không đo được")) + ". ";
   if (got.ok) {
     msg += "Mã cố định (dấu vân tay " + String(gatecore::code_fingerprint(got.code, got.profile.bits).c_str()) + ", " +
@@ -265,7 +265,7 @@ void listen() {
   } else if (edges.size() > 50) {
     msg += "Có sóng nhưng không giải mã được: remote có thể dùng mã khác loại EV1527/PT2262, hoặc tần số khác 433,92 MHz.";
   } else {
-    msg += "Không bắt được tín hiệu: giữ remote gần hơn và giữ nút suốt 6 giây.";
+    msg += "Không bắt được tín hiệu: giữ remote gần hơn và giữ nút suốt 10 giây.";
   }
   back(msg);
 }
@@ -305,7 +305,7 @@ void capture() {
   gatecore::Decoded got = gatecore::decode_confirmed(edges);
   if (!got.ok) {
     return back(String("Không giải mã được mã nào hai lần (") + edges.size() +
-                " sườn xung). Giữ remote gần hơn, giữ nút suốt 6 giây.");
+                " sườn xung). Giữ remote gần hơn, giữ nút suốt 10 giây.");
   }
   device::lock();
   ButtonCode& code = device::cfg.buttons[b];

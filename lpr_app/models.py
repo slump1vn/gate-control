@@ -462,6 +462,11 @@ class GateDevice(models.Model):
         help_text='What happens when a camera watching the exit reads a vehicle. '
                   '"Every vehicle" still reads and logs the plate, but opens regardless.',
     )
+    auto_open = models.BooleanField(
+        default=True, verbose_name='Open automatically',
+        help_text='Off: plates are still read, decided and logged, but the gate is never opened by '
+                  'itself (neither on a registered plate nor on approach). Manual commands still work.',
+    )
     approach_open = models.CharField(
         max_length=4, choices=APPROACH_OPEN, default='off',
         help_text='Open as soon as a vehicle is seen coming toward a camera of these directions, '

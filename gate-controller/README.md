@@ -107,7 +107,7 @@ console: **write it on the device label**. Join it and open `http://192.168.4.1/
      manual), then press *pair* for that button. The device sends its own code,
      generated once, so it can be told apart from the guards' remotes.
    - **capture**: press *capture* and hold the guard remote's button near the
-     device for the 6 seconds. The code is stored only if the same frame was
+     device for the 10 seconds. The code is stored only if the same frame was
      received at least twice.
 3. **test** each button. The barrier moves.
 4. **Dry run** is on after provisioning: every command is checked and
@@ -124,7 +124,7 @@ label (the page can open the gate). It shows:
 - **Connection checks**: the CC1101 (answers on SPI, PARTNUM/VERSION of a
   real CC1101, frequency, power), WiFi (primary or backup, SSID, IP, signal),
   the last heartbeat (HTTP status and age), clock and dry run.
-- **Listen to a remote** for 6 seconds: edges and frames heard, the strongest
+- **Listen to a remote** for 10 seconds: edges and frames heard, the strongest
   signal in dBm, and whether it is a copyable fixed code, probably a rolling
   code, or not an EV1527/PT2262 signal at all. Reads only; stores nothing.
 - **Try the gate**: Open / Close / Stop send the stored codes now, even in dry

@@ -311,7 +311,7 @@ APPROACH_ATTACH_SECONDS = 120
 
 def approach_active(gate, direction, at=None):
     """Whether a vehicle seen coming toward this gate's `direction` camera opens it now."""
-    if gate is None or not gate.is_enabled or direction not in ('in', 'out'):
+    if gate is None or not gate.is_enabled or not gate.auto_open or direction not in ('in', 'out'):
         return False
     if gate.approach_open not in (direction, 'both'):
         return False
@@ -433,6 +433,8 @@ def decide(gate_id, uploaded_files, started=None, is_test=False, camera_id=None,
         mode=mode,
         uploaded_image_id=evidence_id,
         command='open' if granted else '',
+        # A grant on a gate that does not open by itself is logged, never sent
+        command_result='not_sent_auto_open_off' if granted and not gate.auto_open else '',
         decision_latency_ms=_elapsed_ms(started),
         is_test=is_test,
     )
@@ -441,7 +443,7 @@ def decide(gate_id, uploaded_files, started=None, is_test=False, camera_id=None,
     if not is_test:
         metrics.record_gate_decision(event)
         plate_alerts.notify_for_event(event)
-    actuate = granted and can_actuate(gate, mode)
+    actuate = granted and gate.auto_open and can_actuate(gate, mode)
     logger.info(
         'Gate %s decision: %s (%s) plate=%s conf=%s frames=%d/%d mode=%s latency=%dms',
         gate.name, event.decision, event.reason, event.plate_normalized or '-',

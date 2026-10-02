@@ -330,7 +330,7 @@ def api_gate_controller_jobs(request, gate_id):
             return err
         try:
             job = controller_jobs.create(gate, body.get('kind'), body.get('button'), request.user,
-                                         body.get('seconds', 6))
+                                         body.get('seconds', 10))
         except controller_jobs.JobRefused as exc:
             return error(exc.message, exc.code, status=409 if exc.code == 'BUSY' else 400)
         return JsonResponse(controller_jobs.serialize(job), status=201)

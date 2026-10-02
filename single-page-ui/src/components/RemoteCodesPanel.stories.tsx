@@ -8,7 +8,7 @@ const NOW = new Date().toISOString();
 
 function job(overrides: Partial<ControllerJob>): ControllerJob {
   return {
-    id: 1, gate_id: 1, kind: 'capture', button: 'up', seconds: 6, state: 'queued', result: '', detail: {},
+    id: 1, gate_id: 1, kind: 'capture', button: 'up', seconds: 10, state: 'queued', result: '', detail: {},
     created_by: 'installer', created_at: NOW, updated_at: NOW, ...overrides,
   };
 }
@@ -35,7 +35,7 @@ export const Empty: Story = {
     const canvas = within(canvasElement);
     const buttons = await canvas.findAllByRole('button', { name: 'Capture' });
     await userEvent.click(buttons[0]);
-    await expect(args.queue).toHaveBeenCalledWith(1, { kind: 'capture', button: 'up', seconds: 6 });
+    await expect(args.queue).toHaveBeenCalledWith(1, { kind: 'capture', button: 'up', seconds: 10 });
   },
 };
 
@@ -63,7 +63,7 @@ export const Captured: Story = {
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Lưu làm nút LÊN' }));
-    await expect(args.queue).toHaveBeenCalledWith(1, { kind: 'save_code', button: 'up', seconds: 6 });
+    await expect(args.queue).toHaveBeenCalledWith(1, { kind: 'save_code', button: 'up', seconds: 10 });
     await expect(canvas.getByText('525403a6')).toBeInTheDocument();
   },
 };

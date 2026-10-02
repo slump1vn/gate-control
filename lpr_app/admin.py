@@ -321,10 +321,11 @@ class GateDeviceAdmin(admin.ModelAdmin):
     form = GateDeviceForm
     inlines = [GateCameraInline, SimulatedBarrierInline]
     list_display = (
-        'name', 'camera_summary', 'controller_type', 'exit_policy', 'is_enabled', 'arm_state',
+        'name', 'camera_summary', 'controller_type', 'exit_policy', 'auto_open', 'is_enabled', 'arm_state',
         'last_seen', 'firmware_version', 'test_link',
     )
-    list_filter = ('is_enabled', 'controller_type', 'exit_policy')
+    list_filter = ('is_enabled', 'auto_open', 'controller_type', 'exit_policy')
+    list_editable = ('auto_open',)
     readonly_fields = (
         'test_link', 'arm_state', 'arm_state_at', 'last_seen', 'firmware_version',
         'last_command_result', 'created_at', 'updated_at',

@@ -20,7 +20,7 @@ AUDITED_FIELDS = {
         'travel_direction',
     ],
     GateDevice: [
-        'name', 'location', 'controller_type', 'controller_url', 'exit_policy', 'approach_open', 'approach_hours',
+        'name', 'location', 'controller_type', 'controller_url', 'exit_policy', 'auto_open', 'approach_open', 'approach_hours',
         'has_safety_input', 'is_enabled',
     ],
     PlateAlert: ['plate_display', 'label', 'directions', 'chat_ids', 'is_active'],

@@ -347,6 +347,8 @@ export interface GateDevice {
   /** Why the cameras are not enough yet; empty when they are. */
   camera_warning: string;
   exit_policy: 'registered' | 'any';
+  /** Off: plates are read and logged, but the gate never opens by itself. */
+  auto_open?: boolean;
   /** Open as soon as a vehicle comes toward a camera of these directions, before its plate is read. */
   approach_open?: ApproachOpen;
   /** When that applies, e.g. "06:30-08:00, 16:30-18:00"; empty: all day. */
@@ -519,6 +521,7 @@ export interface GateDeviceInput {
   location: string;
   cameras: { camera: number; direction: Direction }[];
   exit_policy: 'registered' | 'any';
+  auto_open?: boolean;
   /** Open as soon as a vehicle comes toward a camera of these directions, before its plate is read. */
   approach_open?: ApproachOpen;
   /** When that applies, e.g. "06:30-08:00, 16:30-18:00"; empty: all day. */

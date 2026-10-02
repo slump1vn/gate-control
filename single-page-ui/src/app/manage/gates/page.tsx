@@ -128,6 +128,7 @@ function GatesContent() {
                         {t(g.online ? 'gates.online' : 'gates.offline')}
                       </Badge>
                       {g.has_safety_input && <Badge color="blue">{t('gates.safety')}</Badge>}
+                      {g.auto_open === false && <Badge color="red">{t('gate.autoOpenOff')}</Badge>}
                       {g.approach_open && g.approach_open !== 'off' && (
                         <Badge color="yellow" title={g.approach_hours || undefined}>{t('gates.approach')}</Badge>
                       )}

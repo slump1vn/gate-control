@@ -17,7 +17,7 @@ interface RemoteCodesPanelProps {
   pollMs?: number;
 }
 
-const CAPTURE_SECONDS = 6;
+const CAPTURE_SECONDS = 10;
 const ACTIVE = new Set<ControllerJob['state']>(['queued', 'dispatched', 'running']);
 const STATE_COLOR: Record<ControllerJob['state'], BadgeColor> = {
   queued: 'yellow', dispatched: 'yellow', running: 'blue', done: 'green', failed: 'red', expired: 'gray',

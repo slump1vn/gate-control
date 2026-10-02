@@ -27,7 +27,7 @@ export function useReasonLabel() {
 }
 
 const NOT_SENT = new Set([
-  'not_sent_shadow_mode', 'not_sent_test', 'not_sent_agent_mode',
+  'not_sent_shadow_mode', 'not_sent_test', 'not_sent_agent_mode', 'not_sent_auto_open_off',
   'not_sent_cli_real_controller', 'expired',
 ]);
 

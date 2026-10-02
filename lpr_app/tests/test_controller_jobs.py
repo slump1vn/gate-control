@@ -84,7 +84,7 @@ class AgentJobQueueTest(TestCase):
         job = controller_jobs.create(self.gate, 'capture', 'up', None)
         self.assertEqual(self.client.get('/api/v1/gate/agent-jobs/').status_code, 403)
         jobs = self.client.get('/api/v1/gate/agent-jobs/', **AGENT).json()['jobs']
-        self.assertEqual(jobs, [{'id': job.id, 'gate_id': self.gate.id, 'kind': 'capture', 'button': 'up', 'seconds': 6}])
+        self.assertEqual(jobs, [{'id': job.id, 'gate_id': self.gate.id, 'kind': 'capture', 'button': 'up', 'seconds': 10}])
         self.assertEqual(self.client.get('/api/v1/gate/agent-jobs/', **AGENT).json()['jobs'], [])
         job.refresh_from_db()
         self.assertEqual(job.state, 'dispatched')

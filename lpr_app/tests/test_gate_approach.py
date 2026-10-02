@@ -177,3 +177,63 @@ class ApproachSettingsApiTest(TestCase):
         self.assertEqual(self.patch(approach_open='always').status_code, 400)
         self.gate.refresh_from_db()
         self.assertEqual((self.gate.approach_open, self.gate.approach_hours), ('off', ''))
+
+
+@override_settings(**GATE_SETTINGS)
+class AutoOpenTest(MediaDirMixin, TestCase):
+    """GateDevice.auto_open off: decide and log, never open by itself."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.object(gate_service, '_executor', SyncExecutor())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.gate = GateDevice.objects.create(name='West', approach_open='both', auto_open=False)
+        self.entry = Camera.objects.create(name='Entry', host='10.0.0.5')
+        GateCamera.objects.create(gate=self.gate, camera=self.entry, direction='in')
+        Vehicle.objects.create(plate_display='30A-123.45')
+
+    def decide(self, plates):
+        data = {'gate_id': self.gate.id, 'camera_id': self.entry.id,
+                'frames': [jpeg(f'f{i}.jpg') for i in range(len(plates))]}
+        with fake_pipeline([[det(p)] for p in plates]):
+            return self.client.post('/api/v1/gate/decide/', data, **AGENT).json()
+
+    def test_a_registered_plate_is_granted_but_not_sent(self):
+        with override_settings(GATE_MODE='live'):
+            data = self.decide(['30A12345', '30A12345'])
+        self.assertEqual((data['decision'], data['reason']), ('granted', 'whitelist_hit'))
+        self.assertFalse(data['actuate'])
+        event = AccessEvent.objects.get(pk=data['event_id'])
+        self.assertEqual(event.command_result, 'not_sent_auto_open_off')
+
+    def test_no_opening_on_approach(self):
+        self.assertFalse(gate_service.approach_active(self.gate, 'in'))
+        response = self.client.post('/api/v1/gate/approach/', data=json.dumps(
+            {'gate_id': self.gate.id, 'camera_id': self.entry.id}), content_type='application/json', **AGENT)
+        self.assertEqual(response.json(), {'approach': False})
+
+    def test_back_on_opens_again(self):
+        self.gate.auto_open = True
+        self.gate.save()
+        with override_settings(GATE_MODE='live'):
+            data = self.decide(['30A12345', '30A12345'])
+        self.assertTrue(data['actuate'])
+        self.assertEqual(AccessEvent.objects.get(pk=data['event_id']).command_result, '')
+
+    def test_toggled_from_the_admin_api_and_audited(self):
+        admin = User.objects.create_user('installer', password='pw')
+        admin.groups.add(Group.objects.get(name='gate_admin'))
+        self.client.force_login(admin)
+        response = self.client.patch(f'/api/v1/gate/devices/{self.gate.id}/', data=json.dumps({'auto_open': True}),
+                                     content_type='application/json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()['auto_open'])
+        from lpr_app.models import GateConfigChange
+        change = GateConfigChange.objects.filter(object_type='gatedevice', object_id=self.gate.id).first()
+        self.assertIn('auto_open', change.changes)
+        # A new gate opens by itself unless told otherwise
+        created = self.client.post('/api/v1/gate/devices/', data=json.dumps({'name': 'East', 'controller_type': 'simulator'}),
+                                   content_type='application/json')
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertTrue(created.json()['auto_open'])

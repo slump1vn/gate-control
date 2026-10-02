@@ -42,7 +42,7 @@ class JobRefused(Exception):
         self.code = code
 
 
-def create(gate, kind, button, user, seconds=6):
+def create(gate, kind, button, user, seconds=10):
     if gate.controller_type not in CAPTURE_CONTROLLERS:
         raise JobRefused('This controller cannot capture remote codes', 'NOT_SUPPORTED')
     if kind not in dict(ControllerJob.KINDS):

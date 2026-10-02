@@ -53,14 +53,14 @@ bool parse_button(const String& name, Button* out) {
   return false;
 }
 
-// POST /capture {"button": "up", "seconds": 6, "job": 12}: listen, answer at once
+// POST /capture {"button": "up", "seconds": 10, "job": 12}: listen, answer at once
 void handle_capture(const gatecore::Request& req) {
   JsonDocument body;
   Button button;
   if (deserializeJson(body, req.body) || !parse_button(body["button"] | "", &button)) {
     return refuse(400, "bad_request");
   }
-  if (!remote::start(button, body["seconds"] | 6, body["job"] | 0)) return refuse(409, "busy");
+  if (!remote::start(button, body["seconds"] | 10, body["job"] | 0)) return refuse(409, "busy");
   JsonDocument doc;
   doc["ok"] = true;
   doc["command"] = "capture";

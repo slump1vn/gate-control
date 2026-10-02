@@ -22,6 +22,7 @@ export default function GateDeviceForm({ gate, cameras, onSubmit, onCancel }: Ga
     cameras: gate ? gate.cameras.map((c) => ({ camera: c.id, direction: c.direction }))
                   : [{ camera: 0, direction: 'in' }, { camera: 0, direction: 'out' }],
     exit_policy: gate?.exit_policy ?? 'registered',
+    auto_open: gate?.auto_open ?? true,
     approach_open: gate?.approach_open ?? 'off',
     approach_hours: gate?.approach_hours ?? '',
     controller_type: gate?.controller_type ?? 'simulator',
@@ -186,6 +187,8 @@ export default function GateDeviceForm({ gate, cameras, onSubmit, onCancel }: Ga
       <div className="flex flex-wrap gap-6">
         <Checkbox id="gate-enabled" label={t('gateForm.enabled')} checked={data.is_enabled} onChange={(v) => set('is_enabled', v)}
           hint={t('gateForm.enabledHint')} />
+        <Checkbox id="gate-auto-open" label={t('gateForm.autoOpen')} checked={data.auto_open ?? true}
+          onChange={(v) => set('auto_open', v)} hint={t('gateForm.autoOpenHint')} />
         <Checkbox id="gate-safety" label={t('gateForm.safety')} checked={data.has_safety_input} onChange={(v) => set('has_safety_input', v)}
           hint={t('gateForm.safetyHint')} />
       </div>

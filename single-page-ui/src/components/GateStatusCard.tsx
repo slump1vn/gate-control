@@ -54,6 +54,7 @@ export default function GateStatusCard({ gate, mode, onCommand }: GateStatusCard
           {radio && <Badge color="blue">{t('gate.radio')}</Badge>}
           {health.dry_run && <Badge color="yellow">{t('gate.dryRun')}</Badge>}
           {!gate.is_enabled && <Badge color="gray">{t('gate.disabled')}</Badge>}
+          {gate.auto_open === false && <Badge color="red">{t('gate.autoOpenOff')}</Badge>}
           <Badge color={gate.online ? 'green' : 'red'}>
             {t(gate.online ? 'gate.controllerOnline' : 'gate.controllerOffline')}
           </Badge>
