@@ -23,6 +23,10 @@ void show() {
   doc["wifi_password_set"] = c.wifi_password.length() > 0;
   doc["ssid2"] = c.wifi2_ssid;
   doc["wifi2_password_set"] = c.wifi2_password.length() > 0;
+  doc["ip"] = c.static_ip.length() ? c.static_ip : "dhcp";
+  doc["mask"] = c.static_mask;
+  doc["gw"] = c.static_gw;
+  doc["dns"] = c.static_dns;
   doc["gate"] = c.gate_id;
   doc["secret_set"] = c.secret.length() > 0;
   doc["hburl"] = c.heartbeat_url;
@@ -34,9 +38,32 @@ void show() {
   answer(out);
 }
 
+bool valid_ip(const String& text) {
+  IPAddress ip;
+  return ip.fromString(text);
+}
+
 void set(JsonDocument& doc) {
   Config& c = device::cfg;
   int changed = 0;
+  if (doc["ip"].is<const char*>()) {
+    // {"ip":""} or {"ip":"dhcp"} goes back to DHCP; a static address needs mask and gateway too
+    String ip = doc["ip"].as<const char*>();
+    String mask = doc["mask"] | c.static_mask.c_str();
+    String gw = doc["gw"] | c.static_gw.c_str();
+    String dns = doc["dns"] | c.static_dns.c_str();
+    if (ip.length() == 0 || ip == "dhcp") {
+      c.static_ip = c.static_mask = c.static_gw = c.static_dns = "";
+    } else if (!valid_ip(ip) || !valid_ip(mask) || !valid_ip(gw) || (dns.length() && !valid_ip(dns))) {
+      return answer("error: ip, mask, gw (and dns) must be IPv4 addresses");
+    } else {
+      c.static_ip = ip;
+      c.static_mask = mask;
+      c.static_gw = gw;
+      c.static_dns = dns;
+    }
+    ++changed;
+  }
   if (doc["ssid"].is<const char*>()) c.wifi_ssid = doc["ssid"].as<const char*>(), ++changed;
   if (doc["wifipw"].is<const char*>()) c.wifi_password = doc["wifipw"].as<const char*>(), ++changed;
   if (doc["ssid2"].is<const char*>()) c.wifi2_ssid = doc["ssid2"].as<const char*>(), ++changed;

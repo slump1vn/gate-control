@@ -21,6 +21,12 @@ struct Config {
   // Backup WiFi, tried when the first one cannot be joined; empty = none
   String wifi2_ssid;
   String wifi2_password;
+  // Static address on the primary WiFi, e.g. 172.87.80.254; empty = DHCP. The backup
+  // network always uses DHCP, so a wrong static address can still be fixed from there
+  String static_ip;
+  String static_mask;
+  String static_gw;
+  String static_dns;
   uint32_t gate_id = 0;
   // The gate's controller token from /manage/gates: the HMAC key, never sent
   String secret;
@@ -38,6 +44,8 @@ struct Config {
 
   // Validates and answers commands, but never transmits. On after provisioning.
   bool dry_run = true;
+
+  bool static_ip_set() const { return static_ip.length() > 0; }
 
   bool provisioned() const { return wifi_ssid.length() && secret.length() && gate_id && heartbeat_url.length(); }
 };

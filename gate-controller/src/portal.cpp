@@ -178,6 +178,11 @@ void page() {
   html += "WiFi dự phòng (dùng khi mạng chính không vào được 20 giây)<input name=ssid2 value=\"" + esc(c.wifi2_ssid) + "\">";
   html += "Mật khẩu WiFi dự phòng (để trống: giữ nguyên)<input name=wifipw2 type=password>";
   html += F("<label><input type=checkbox name=clear2 value=1 style='width:auto'> Xoá WiFi dự phòng</label><br>");
+  html += "IP tĩnh trên WiFi chính (để trống: DHCP; WiFi dự phòng luôn dùng DHCP)<input name=ip placeholder=172.87.80.254 value=\"" +
+          esc(c.static_ip) + "\">";
+  html += "Subnet mask<input name=mask placeholder=255.255.252.0 value=\"" + esc(c.static_mask) + "\">";
+  html += "Gateway<input name=gw placeholder=172.87.80.1 value=\"" + esc(c.static_gw) + "\">";
+  html += "DNS (để trống: dùng gateway)<input name=dns value=\"" + esc(c.static_dns) + "\">";
   html += "Gate id (trong /manage/gates)<input name=gate value=\"" + String(c.gate_id) + "\">";
   html += String("Token bộ điều khiển (để trống: giữ nguyên") + (c.secret.length() ? ", đã có" : ", CHƯA CÓ") +
           ")<input name=secret type=password>";
@@ -210,6 +215,19 @@ void save() {
   } else {
     if (srv->hasArg("ssid2")) c.wifi2_ssid = srv->arg("ssid2");
     if (srv->arg("wifipw2").length()) c.wifi2_password = srv->arg("wifipw2");
+  }
+  if (srv->hasArg("ip")) {
+    String ip = srv->arg("ip"), mask = srv->arg("mask"), gw = srv->arg("gw"), dns = srv->arg("dns");
+    ip.trim(); mask.trim(); gw.trim(); dns.trim();
+    IPAddress check;
+    if (ip.length() && (!check.fromString(ip) || !check.fromString(mask) || !check.fromString(gw) ||
+                        (dns.length() && !check.fromString(dns)))) {
+      return back("IP tĩnh cần địa chỉ, subnet mask và gateway hợp lệ; chưa lưu gì.");
+    }
+    c.static_ip = ip;
+    c.static_mask = ip.length() ? mask : "";
+    c.static_gw = ip.length() ? gw : "";
+    c.static_dns = ip.length() ? dns : "";
   }
   if (srv->hasArg("gate")) c.gate_id = strtoul(srv->arg("gate").c_str(), nullptr, 10);
   if (srv->arg("secret").length()) c.secret = srv->arg("secret");

@@ -24,6 +24,8 @@ const uint32_t NETWORK_TRY_MS = 20000;
 
 String ssid, password;     // primary
 String ssid2, password2;   // backup, may be empty
+// Static address of the primary network; ip == INADDR_NONE means DHCP
+IPAddress static_ip(INADDR_NONE), static_gw(INADDR_NONE), static_mask(INADDR_NONE), static_dns(INADDR_NONE);
 bool on_backup_net = false;
 uint32_t attempt_started = 0;
 volatile int hb_status = 0;          // HTTP status of the last heartbeat, <0 transport error, 0 none yet
@@ -93,6 +95,11 @@ void join(bool backup) {
   on_backup_net = backup;
   attempt_started = millis();
   WiFi.disconnect();
+  if (!backup && static_ip != IPAddress(INADDR_NONE)) {
+    WiFi.config(static_ip, static_gw, static_mask, static_dns);
+  } else {
+    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);  // DHCP
+  }
   if (backup) {
     WiFi.begin(ssid2.c_str(), password2.c_str());
   } else {
@@ -122,6 +129,14 @@ void begin(const Config& cfg) {
   password = cfg.wifi_password;
   ssid2 = cfg.wifi2_ssid;
   password2 = cfg.wifi2_password;
+  IPAddress ip, mask, gw, dns;
+  if (cfg.static_ip_set() && ip.fromString(cfg.static_ip) && mask.fromString(cfg.static_mask) &&
+      gw.fromString(cfg.static_gw)) {
+    static_ip = ip;
+    static_mask = mask;
+    static_gw = gw;
+    static_dns = dns.fromString(cfg.static_dns) ? dns : gw;
+  }
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(("gate-ctl-" + String(cfg.gate_id)).c_str());
   WiFi.setAutoReconnect(true);

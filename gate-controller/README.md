@@ -138,6 +138,13 @@ Over the USB serial port (115200 baud), one JSON object per line:
 `{"cmd":"restart"}`. Secrets are never printed. The device also prints the
 WiFi network it joined and its IP address.
 
+A **static address** on the primary WiFi:
+`{"cmd":"set","ip":"172.87.80.254","mask":"255.255.252.0","gw":"172.87.80.1","dns":"192.168.2.19"}`
+(DNS defaults to the gateway), `{"cmd":"set","ip":"dhcp"}` to go back to DHCP;
+also on the device page. The backup WiFi always uses DHCP, so a wrong static
+address still leaves a way in. Update the gate's controller address in
+`/manage/gates` to match.
+
 Flashing through a network serial bridge (pyserial's RFC2217 example server)
 cannot drive the auto-reset into download mode in time; hold BOOT while the
 flasher connects.
