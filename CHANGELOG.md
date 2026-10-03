@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The docs advised keeping `QWEN_REQUEST_TIMEOUT` near `GATE_DECIDE_TIMEOUT`. Set that way (60/60), an overloaded primary model server made every decision time out before the fallback was even asked, although the fallback answered in seconds. The advice is now to keep it at about a quarter of `GATE_DECIDE_TIMEOUT` (15 with 60), stay on the fallback for a few minutes (`QWEN_PRIMARY_RETRY_SECONDS=300`) and give a slower fallback its own timeout
 - A gate controller resetting in the middle of its heartbeats (for instance while a flashing tool kept retrying on its USB port) left half-open connections that took every `lpr-app` thread, and no page loaded until a restart. Controller heartbeats now go through the `live-gateway` nginx, which reads each request with short timeouts first; point the controller's heartbeat address at `http://<server>:8002/api/v1/gate/heartbeat/`
 - `lpr-app`'s Docker healthcheck makes a real HTTP request, so a stuck server shows as unhealthy instead of healthy
 
